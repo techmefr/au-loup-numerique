@@ -63,3 +63,21 @@ Le jeu physique utilise **60 cartes** (36 moutons, 16 loups, 8 chiens déguisés
 ## Décisions ouvertes
 
 Le cœur de l'expérience est validé, mais **pas encore les pénalités/récompenses des votes simultanés**, le mode exact de déclaration, les conditions de victoire ni la longueur de la partie. Implémenter ces choix comme paramètres **explicites et testables**, sans les inventer comme des règles officielles. Une configuration de démonstration peut être fournie et étiquetée comme telle.
+
+## Démarrage local
+
+```bash
+pnpm install
+pnpm start        # http://localhost:3000 (PORT=xxxx pour changer)
+pnpm test         # moteur + serveur WebSocket (2 clients, multi-salles, reconnexion)
+```
+
+Un joueur crée la salle, les autres ouvrent `/room/CODE`. Écran partagé lecture seule : `/display/CODE`.
+
+## État du MVP (valeurs de démo, à valider par l auteur)
+
+- Serveur autoritaire (`src/engine`, `src/server`), snapshots par joueur, aucune main adverse envoyée.
+- Variante d annonce A (« moutons ») ou B (nombre de sauvés) au choix du poseur.
+- **Règle de vote à valider** : démasqué si au moins la moitié des votes exprimés disent AU LOUP. Points : +1 à chaque votant juste, +1 au poseur si le groupe se trompe. Fin après 3 manches par joueur. Timeout de vote 60 s (abstention).
+- Prairie en DOM avec 6 actions et renommage (hôte) ; illustrations = emojis provisoires.
+- Pas encore : poursuite chien/loup animée, QR code, déploiement documenté, test e2e navigateur.
