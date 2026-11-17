@@ -34,3 +34,8 @@ input[type=text]{font:inherit;padding:10px;border-radius:12px;border:2px solid v
 .panel{background:#fff8;border-radius:14px;padding:8px 12px;margin:8px 0}
 .err{color:var(--alert);min-height:1.4em}
 .score li{margin:2px 0}
+.stage{position:absolute;inset:0;background:#0002;z-index:4}
+.actor{position:absolute;top:40%;font-size:44px;transition:left 1.4s,transform .5s}
+.actor.revealed{animation:jump .5s}
+.actor.dog.chasing{left:90%!important}
+.actor.wolf.fleeing{left:100%!important;opacity:0;transition:left 1.2s,opacity 1.4s}

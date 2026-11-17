@@ -12,7 +12,7 @@ const url = new URL(location.href);
 const parts = url.pathname.split('/').filter(Boolean);
 const displayCode = parts[0] === 'display' ? parts[1] : null;
 let roomCode = parts[0] === 'room' ? parts[1] : null;
-let snap = null, selected = new Set(), claimKind = 'all-sheep', claimCount = 1, err = '', sheepState = new Map(), openMenu = null;
+let stage = null, stageAt = 0, snap = null, selected = new Set(), claimKind = 'all-sheep', claimCount = 1, err = '', sheepState = new Map(), openMenu = null;
 
 const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
 const send = (m) => ws.readyState === 1 && ws.send(JSON.stringify(m));
@@ -40,7 +40,7 @@ ws.onmessage = (e) => {
   } else if (m.type === 'error') { err = ERR[m.code] || m.code; render(); }
   else if (m.type === 'meadow:sheep_action') playAction(m.sheepId, m.action);
   else if (m.type === 'meadow:sheep_removed') { const el = document.querySelector(`[data-sheep="${m.sheepId}"]`); el?.classList.add('poof'); }
-  else if (m.type === 'round:revealed') beep(m.reveal.resolution.sheepEaten ? 180 : 520);
+  else if (m.type === 'round:revealed') { beep(m.reveal.resolution.sheepEaten ? 180 : 520); stage = m.reveal; stageAt = Date.now(); playStage(); }
 };
 
 function beep(freq) {
@@ -121,7 +121,7 @@ function render() {
   let body = '';
   if (g.phase === 'lobby') {
     const link = `${location.origin}/room/${g.code}`;
-    body = `<h2>Salle ${g.code}</h2><p>Lien à partager : <a href="${link}">${link}</a></p><p>Écran partagé : <a href="/display/${g.code}" target="_blank">/display/${g.code}</a></p>
+    body = `<h2>Salle ${g.code}</h2><p>Lien à partager : <a href="${link}">${link}</a></p><img src="/qr/${g.code}.svg" alt="QR code pour rejoindre la salle ${g.code}" width="160" height="160"><p>Écran partagé : <a href="/display/${g.code}" target="_blank">/display/${g.code}</a></p>
       <ul>${g.players.map((p) => `<li>${p.name} ${p.connected ? '🟢' : '⚪'}${p.id === g.hostId ? ' (hôte)' : ''}</li>`).join('')}</ul>
       ${isHost ? `<button id="start" ${g.players.length < 2 ? 'disabled' : ''}>Lancer la partie (${g.players.length} joueurs)</button>` : '<p>En attente de l’hôte…</p>'}`;
   } else if (g.phase === 'select') {
@@ -156,6 +156,7 @@ function render() {
   app.innerHTML = (displayCode ? '' : body) + meadowHtmlStr + `<ul class="score panel">${board}</ul><p>Pioche : ${g.deck}</p><p class="err" role="alert">${err}</p>`;
   if (displayCode) app.insertAdjacentHTML('afterbegin', `<h2>Salle ${g.code} — ${g.phase}</h2>`);
   bindMeadow();
+  playStage();
   if (displayCode) return;
   $('#start')?.addEventListener('click', () => send({ type: 'game:start' }));
   $('#next')?.addEventListener('click', () => send({ type: 'game:next' }));
@@ -179,3 +180,31 @@ function render() {
   }
 }
 render();
+
+let stageEl = null;
+function playStage() {
+  if (!stage || Date.now() - stageAt > 8000) return;
+  const m = $('#meadow');
+  if (!m || (stageEl && stageEl.isConnected)) return;
+  if (stageEl) { m.append(stageEl); return; }
+  const r = stage;
+  const calm = document.body.classList.contains('calm');
+  const wolves = r.cards.filter((c) => c === 'wolf').length;
+  const dogs = r.cards.filter((c) => c === 'dog').length;
+  const items = r.cards.map((t, i) => `<span class="actor ${t}" style="left:${20 + i * 18}%" data-t="${t}">🐑</span>`).join('');
+  stageEl = el(`<div class="stage" aria-hidden="true">${items}</div>`);
+  const st = stageEl;
+  m.append(st);
+  const reveal = () => st.querySelectorAll('.actor').forEach((a) => {
+    if (a.dataset.t === 'sheep') return;
+    a.textContent = a.dataset.t === 'wolf' ? '🐺' : '🐕';
+    a.classList.add('revealed');
+  });
+  const chase = () => {
+    if (!wolves || !dogs) return;
+    st.querySelectorAll('.dog').forEach((d) => d.classList.add('chasing'));
+    st.querySelectorAll('.wolf').forEach((w, i) => { if (i < dogs) w.classList.add('fleeing'); });
+  };
+  if (calm) reveal(); else { setTimeout(reveal, 900); setTimeout(chase, 1800); }
+  setTimeout(() => { st.remove(); stageEl = null; stage = null; }, calm ? 3000 : 4500);
+}

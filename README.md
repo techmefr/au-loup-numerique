@@ -80,4 +80,17 @@ Un joueur crée la salle, les autres ouvrent `/room/CODE`. Écran partagé lectu
 - Variante d annonce A (« moutons ») ou B (nombre de sauvés) au choix du poseur.
 - **Règle de vote à valider** : démasqué si au moins la moitié des votes exprimés disent AU LOUP. Points : +1 à chaque votant juste, +1 au poseur si le groupe se trompe. Fin après 3 manches par joueur. Timeout de vote 60 s (abstention).
 - Prairie en DOM avec 6 actions et renommage (hôte) ; illustrations = emojis provisoires.
-- Pas encore : poursuite chien/loup animée, QR code, déploiement documenté, test e2e navigateur.
+- Pas encore : illustrations définitives, mode hybride de sanctions validé par l auteur.
+
+## Tests et déploiement
+
+```bash
+pnpm test    # moteur + serveur WebSocket
+pnpm e2e     # Playwright : 2 navigateurs, manche complète (npx playwright install chromium au premier lancement)
+docker build -t au-loup . && docker run -p 3000:3000 au-loup
+```
+
+- Le serveur sert le client statique et le WebSocket sur le même port ; derrière un proxy, activer le support WebSocket (Upgrade) et HTTPS (le client passe en `wss` automatiquement).
+- Une seule instance : les salles sont en mémoire (Redis nécessaire pour en lancer plusieurs).
+- QR code : `/qr/CODE.svg`, généré depuis l'en-tête `Host`.
+- Révélation : les cartes se retournent, le chien chasse le loup ; « Mouvements réduits » remplace l'animation par un affichage direct.

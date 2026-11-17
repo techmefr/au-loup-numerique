@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { randomInt } from 'node:crypto';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { z } from 'zod';
+import QRCode from 'qrcode';
 import { GameError } from '../engine/game.js';
 import { Room, SHEEP_ACTIONS } from './room.js';
 
@@ -39,6 +40,14 @@ export function createApp(port: number) {
   const http = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
     let path = url.pathname;
+    const qr = /^\/qr\/([A-Z]{4})\.svg$/.exec(path);
+    if (qr) {
+      const host = req.headers.host ?? 'localhost';
+      const svg = await QRCode.toString(`http://${host}/room/${qr[1]}`, { type: 'svg', margin: 1 });
+      res.writeHead(200, { 'content-type': 'image/svg+xml' });
+      res.end(svg);
+      return;
+    }
     if (path === '/' || path.startsWith('/room/') || path.startsWith('/display/')) path = '/index.html';
     const file = join(WEB, normalize(path).replace(/^(\.\.[/\\])+/, ''));
     try {
