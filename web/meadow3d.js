@@ -1,22 +1,31 @@
 import * as THREE from 'three';
+import { GROUND, paintGround } from '/ground.js';
 
-const N = 16;
-const HALF = N / 2;
-const TOP = 0.5;
+const TOP = 0;
 const ACTION_MS = { jump: 600, dance: 1200, bleat: 900, sleep: 3500, graze: 2200, run: 1400 };
 const PEN = { x0: -3, x1: 4, z0: -6, z1: 1 };
 const GATE = { x0: -0.5, x1: 1.5 };
-const DEPOSIT = new THREE.Vector3(0.5, TOP, 3.4);
+const DEPOSIT = new THREE.Vector3(0.5, TOP, 3.6);
 
 const rng = (seed) => () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
-const world = (gx, gz) => new THREE.Vector3(gx - HALF + 0.5, TOP, gz - HALF + 0.5);
-const riverX = (gz) => 2 + Math.round(Math.sin(gz * 0.55) * 1.1);
-const pathX = (gz) => (gz >= 9 ? 8 : 8 + Math.round(Math.sin(gz * 0.5 + 1)));
-const inPen = (gx, gz) => gx >= 5 && gx <= 11 && gz >= 2 && gz <= 8;
-
-const box = (w, h, d, color, x = 0, y = 0, z = 0) => {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color, flatShading: true }));
+const mat = (color) => new THREE.MeshLambertMaterial({ color });
+const sphere = (r, color, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) => {
+  const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 2), mat(color));
   m.position.set(x, y, z);
+  m.scale.set(sx, sy, sz);
+  m.castShadow = true;
+  return m;
+};
+const cyl = (r, h, color, x = 0, y = 0, z = 0) => {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 10), mat(color));
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  return m;
+};
+const cone = (r, h, color, x, y, z, rx = 0) => {
+  const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 8), mat(color));
+  m.position.set(x, y, z);
+  m.rotation.x = rx;
   m.castShadow = true;
   return m;
 };
@@ -25,36 +34,33 @@ function animalModel(type) {
   const g = new THREE.Group();
   const body = new THREE.Group();
   g.add(body);
-  const legs = (c) => [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]].forEach(([x, z]) => body.add(box(0.14, 0.22, 0.14, c, x, 0.11, z)));
+  const legs = (c, h = 0.28) => [[-0.2, -0.22], [0.2, -0.22], [-0.2, 0.22], [0.2, 0.22]].forEach(([x, z]) => body.add(cyl(0.06, h, c, x, h / 2, z)));
+  const head = new THREE.Group();
+  head.name = 'head';
   if (type === 'sheep') {
-    legs(0x3b2f2f);
-    body.add(box(0.7, 0.5, 0.9, 0xfff5db, 0, 0.47, 0));
-    body.add(box(0.76, 0.3, 0.6, 0xffffff, 0, 0.62, 0));
-    const head = box(0.34, 0.34, 0.34, 0x3b2f2f, 0, 0.62, 0.55);
-    head.name = 'head';
-    body.add(head);
-    head.add(box(0.1, 0.1, 0.04, 0xffffff, -0.09, 0.05, 0.18), box(0.1, 0.1, 0.04, 0xffffff, 0.09, 0.05, 0.18));
+    legs(0x4a3a35);
+    for (const [x, y, z, r] of [[0, 0.55, 0, 0.46], [0.28, 0.58, 0.1, 0.34], [-0.28, 0.58, 0.1, 0.34], [0, 0.6, -0.3, 0.36], [0, 0.78, 0.12, 0.32], [0.2, 0.5, -0.25, 0.28], [-0.2, 0.5, -0.25, 0.28]]) body.add(sphere(r, 0xfffaf0, x, y, z));
+    head.position.set(0, 0.55, 0.5);
+    head.add(sphere(0.2, 0x4a3a35, 0, 0, 0.05, 1, 0.95, 1.1), sphere(0.09, 0xfffaf0, -0.15, 0.1, -0.02), sphere(0.09, 0xfffaf0, 0.15, 0.1, -0.02));
   } else if (type === 'wolf') {
-    legs(0x4a4a5a);
-    body.add(box(0.6, 0.45, 1.0, 0x6b6b80, 0, 0.45, 0));
-    const head = box(0.4, 0.38, 0.4, 0x6b6b80, 0, 0.6, 0.6);
-    head.name = 'head';
-    head.add(box(0.2, 0.16, 0.26, 0x4a4a5a, 0, -0.06, 0.28), box(0.08, 0.16, 0.08, 0x4a4a5a, -0.13, 0.26, 0), box(0.08, 0.16, 0.08, 0x4a4a5a, 0.13, 0.26, 0), box(0.06, 0.06, 0.03, 0xffd54a, -0.1, 0.06, 0.2), box(0.06, 0.06, 0.03, 0xffd54a, 0.1, 0.06, 0.2));
-    body.add(head, box(0.14, 0.14, 0.5, 0x4a4a5a, 0, 0.55, -0.7));
+    legs(0x4a4a5a, 0.32);
+    body.add(sphere(0.42, 0x77778c, 0, 0.55, -0.05, 0.9, 0.85, 1.45), sphere(0.2, 0x5a5a6c, 0, 0.55, -0.7, 0.7, 0.7, 1.6));
+    head.position.set(0, 0.7, 0.62);
+    head.add(sphere(0.25, 0x77778c), sphere(0.13, 0x4a4a5a, 0, -0.06, 0.26, 1, 0.8, 1.4), cone(0.09, 0.24, 0x4a4a5a, -0.15, 0.25, -0.02), cone(0.09, 0.24, 0x4a4a5a, 0.15, 0.25, -0.02), sphere(0.045, 0xffd54a, -0.1, 0.06, 0.2), sphere(0.045, 0xffd54a, 0.1, 0.06, 0.2));
   } else {
-    legs(0x8e623b);
-    body.add(box(0.55, 0.4, 0.9, 0xd9a05b, 0, 0.42, 0));
-    const head = box(0.38, 0.36, 0.38, 0xd9a05b, 0, 0.58, 0.55);
-    head.name = 'head';
-    head.add(box(0.12, 0.2, 0.08, 0x8e623b, -0.2, 0, 0), box(0.12, 0.2, 0.08, 0x8e623b, 0.2, 0, 0), box(0.14, 0.12, 0.16, 0x3b2f2f, 0, -0.06, 0.26));
-    body.add(head, box(0.12, 0.12, 0.4, 0xd9a05b, 0, 0.55, -0.6));
+    legs(0x8e623b, 0.3);
+    body.add(sphere(0.4, 0xd9a05b, 0, 0.5, -0.05, 0.85, 0.8, 1.35), sphere(0.17, 0xfff1d3, 0, 0.45, 0.35, 1, 1, 0.9), sphere(0.12, 0xd9a05b, 0, 0.62, -0.62, 0.7, 0.7, 1.7));
+    head.position.set(0, 0.68, 0.6);
+    head.add(sphere(0.24, 0xd9a05b), sphere(0.13, 0xfff1d3, 0, -0.06, 0.22, 1, 0.85, 1.2), sphere(0.05, 0x2b1d14, 0, -0.03, 0.36), sphere(0.11, 0x8e623b, -0.23, 0, -0.02, 0.6, 1.3, 0.8), sphere(0.11, 0x8e623b, 0.23, 0, -0.02, 0.6, 1.3, 0.8));
   }
+  body.add(head);
   g.userData.body = body;
+  g.scale.setScalar(1.7);
   return g;
 }
 
 export function createMeadow(container, hooks) {
-  const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -62,102 +68,77 @@ export function createMeadow(container, hooks) {
   renderer.domElement.setAttribute('aria-hidden', 'true');
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a2e22);
-  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -100, 200);
-  camera.position.set(22, 20, 22);
-  camera.lookAt(0, -0.8, 0);
+  scene.background = new THREE.Color(0xf1ebdd);
+  const camera = new THREE.PerspectiveCamera(28, 1, 1, 200);
+  const target = new THREE.Vector3(0, 0, 0.6);
 
-  scene.add(new THREE.HemisphereLight(0xfff1d3, 0x2f613f, 1.1));
-  const sun = new THREE.DirectionalLight(0xfff1d3, 1.4);
-  sun.position.set(-12, 22, 8);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xb9d89a, 1.25));
+  const sun = new THREE.DirectionalLight(0xfff4de, 1.5);
+  sun.position.set(-8, 16, 9);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 14, bottom: -14, near: 1, far: 60 });
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.radius = 5;
+  Object.assign(sun.shadow.camera, { left: -13, right: 13, top: 11, bottom: -11, near: 1, far: 50 });
   scene.add(sun);
 
-  const rand = rng(42);
-  const cells = [];
-  for (let gx = 0; gx < N; gx++) {
-    for (let gz = 0; gz < N; gz++) {
-      const water = gx === riverX(gz);
-      const way = !water && gx === pathX(gz);
-      const h = water ? 0.6 : 1;
-      const pen = inPen(gx, gz);
-      const color = water ? 0x4f9dd7 : way ? 0xe9d9b0 : pen ? (rand() > 0.8 ? 0xd8c070 : 0x9bd06a) : rand() > 0.5 ? 0x8fc765 : 0x84bd5c;
-      cells.push({ gx, gz, h, color });
-    }
-  }
-  const ground = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({ flatShading: true }), cells.length);
-  const tmp = new THREE.Object3D();
-  cells.forEach((c, i) => {
-    tmp.position.set(c.gx - HALF + 0.5, TOP - c.h / 2, c.gz - HALF + 0.5);
-    tmp.scale.set(1, c.h, 1);
-    tmp.updateMatrix();
-    ground.setMatrixAt(i, tmp.matrix);
-    ground.setColorAt(i, new THREE.Color(c.color));
-  });
-  ground.receiveShadow = true;
-  scene.add(ground);
-  const base = box(N + 0.4, 2, N + 0.4, 0x6b4a2b, 0, -1.2, 0);
-  base.castShadow = false;
-  scene.add(base);
+  const painted = new THREE.Mesh(new THREE.PlaneGeometry(GROUND.w, GROUND.d), new THREE.MeshBasicMaterial({ map: paintGround(), transparent: true }));
+  painted.rotation.x = -Math.PI / 2;
+  scene.add(painted);
+  const catcher = new THREE.Mesh(new THREE.PlaneGeometry(GROUND.w, GROUND.d), new THREE.ShadowMaterial({ opacity: 0.22 }));
+  catcher.rotation.x = -Math.PI / 2;
+  catcher.position.y = 0.01;
+  catcher.receiveShadow = true;
+  scene.add(catcher);
 
+  const rand = rng(11);
   const deco = new THREE.Group();
   scene.add(deco);
-  for (let i = 0; i < 30; i++) {
-    const gx = Math.floor(rand() * N), gz = Math.floor(rand() * N);
-    if (Math.abs(gx - riverX(gz)) <= 1 || Math.abs(gx - pathX(gz)) <= 1) continue;
-    if (gx >= 4 && gx <= 12 && gz >= 1 && gz <= 12) continue;
+  const tree = (x, z, color, s = 1) => {
     const t = new THREE.Group();
-    const hgt = 1 + Math.floor(rand() * 2);
-    t.add(box(0.4, hgt, 0.4, 0x8e623b, 0, hgt / 2, 0));
-    const leaf = rand() > 0.5 ? 0x2f7a4a : 0x3f9a58;
-    t.add(box(1.5, 0.9, 1.5, leaf, 0, hgt + 0.3, 0), box(1.0, 0.8, 1.0, leaf, 0, hgt + 1.0, 0), box(0.5, 0.5, 0.5, leaf, 0, hgt + 1.6, 0));
-    t.position.copy(world(gx, gz));
+    t.add(cyl(0.12 * s, 0.7 * s, 0x8e623b, 0, 0.35 * s, 0));
+    for (const [dx, dy, dz, r] of [[0, 1.1, 0, 0.75], [0.45, 0.85, 0.15, 0.52], [-0.45, 0.9, -0.1, 0.55], [0.1, 1.5, 0.05, 0.5], [0, 0.85, 0.45, 0.5]]) t.add(sphere(r * s, color, dx * s, dy * s, dz * s));
+    t.position.set(x, 0, z);
     deco.add(t);
-  }
-  const flowerColors = [0xff6b9d, 0xffd54a, 0xffffff, 0xb28dff];
-  for (let i = 0; i < 40; i++) {
-    const gx = Math.floor(rand() * N), gz = Math.floor(rand() * N);
-    if (gx === riverX(gz) || gx === pathX(gz) || inPen(gx, gz)) continue;
-    const f = box(0.14, 0.14, 0.14, flowerColors[i % 4], (rand() - 0.5) * 0.7, 0.12, (rand() - 0.5) * 0.7);
-    f.position.add(world(gx, gz));
-    deco.add(f);
-  }
-  for (const gz of [5, 6]) {
-    const b = box(1.4, 0.15, 1, 0x8e623b);
-    b.position.copy(world(riverX(gz), gz)).add(new THREE.Vector3(0, -0.05, 0));
-    deco.add(b);
+  };
+  const greens = [0x5aa63a, 0x6cb844, 0x4e9a35];
+  [[-9.4, -7.2], [-5.6, -7.0], [6.9, -7.2], [9.6, -6.6], [9.4, 5.2], [-4.4, 7.2], [6.8, 7.0], [8.6, -1.0], [-9.4, 7.0], [2.4, -7.6]].forEach(([x, z], i) => tree(x, z, greens[i % 3], 0.9 + rand() * 0.5));
+  tree(-9.2, 1.6, 0xe97aa6, 1.1);
+  for (let i = 0; i < 28; i++) {
+    const x = -10 + rand() * 20, z = -7.5 + rand() * 15;
+    if (x > PEN.x0 - 1 && x < PEN.x1 + 1 && z > PEN.z0 - 1 && z < DEPOSIT.z + 1.5) continue;
+    if (Math.abs(x + 7.6) < 1.8) continue;
+    deco.add(sphere(0.09, [0xff6b9d, 0xffd54a, 0xffffff, 0xb28dff][i % 4], x, 0.1, z));
   }
 
-  const WOOD = 0xb07a45;
-  const post = (x, z) => deco.add(box(0.18, 1.0, 0.18, 0x8e623b, x, TOP + 0.5, z));
-  const rail = (x0, z0, x1, z1) => {
+  const WOOD = 0xb98550;
+  const rod = (x0, z0, x1, z1, y, r = 0.045, color = WOOD, parent = deco) => {
     const len = Math.hypot(x1 - x0, z1 - z0);
-    for (const y of [0.35, 0.75]) {
-      const r = box(x0 === x1 ? 0.08 : len, 0.1, z0 === z1 ? 0.08 : len, WOOD, (x0 + x1) / 2, TOP + y, (z0 + z1) / 2);
-      deco.add(r);
-    }
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8), mat(color));
+    m.position.set((x0 + x1) / 2, y, (z0 + z1) / 2);
+    m.rotation.set(z0 === z1 ? 0 : Math.PI / 2, 0, z0 === z1 ? Math.PI / 2 : 0);
+    m.castShadow = true;
+    parent.add(m);
   };
+  const post = (x, z) => deco.add(cyl(0.09, 0.95, 0x8e623b, x, 0.47, z));
   for (let x = PEN.x0; x <= PEN.x1; x++) {
     post(x, PEN.z0);
     if (x < GATE.x0 || x > GATE.x1) post(x, PEN.z1);
   }
   for (let z = PEN.z0 + 1; z < PEN.z1; z++) { post(PEN.x0, z); post(PEN.x1, z); }
-  rail(PEN.x0, PEN.z0, PEN.x1, PEN.z0);
-  rail(PEN.x0, PEN.z0, PEN.x0, PEN.z1);
-  rail(PEN.x1, PEN.z0, PEN.x1, PEN.z1);
-  rail(PEN.x0, PEN.z1, GATE.x0, PEN.z1);
-  rail(GATE.x1, PEN.z1, PEN.x1, PEN.z1);
+  for (const y of [0.35, 0.72]) {
+    rod(PEN.x0, PEN.z0, PEN.x1, PEN.z0, y);
+    rod(PEN.x0, PEN.z0, PEN.x0, PEN.z1, y);
+    rod(PEN.x1, PEN.z0, PEN.x1, PEN.z1, y);
+    rod(PEN.x0, PEN.z1, GATE.x0, PEN.z1, y);
+    rod(GATE.x1, PEN.z1, PEN.x1, PEN.z1, y);
+  }
   post(GATE.x0, PEN.z1);
   post(GATE.x1, PEN.z1);
 
   const leafMesh = (dir) => {
     const pivot = new THREE.Group();
-    const w = 1.0;
-    for (const y of [0.3, 0.55, 0.8]) pivot.add(box(w, 0.09, 0.07, 0xd9a05b, (dir * w) / 2, TOP + y, 0));
-    pivot.add(box(0.07, 0.7, 0.07, 0xd9a05b, dir * 0.96, TOP + 0.55, 0));
-    pivot.add(box(0.07, 0.7, 0.07, 0xd9a05b, dir * 0.04, TOP + 0.55, 0));
+    for (const y of [0.3, 0.55, 0.8]) rod(0, 0, dir * 1.0, 0, y, 0.04, 0xe0b070, pivot);
+    pivot.add(cyl(0.05, 0.9, 0xe0b070, dir * 0.97, 0.5, 0), cyl(0.05, 0.9, 0xe0b070, dir * 0.03, 0.5, 0));
     return pivot;
   };
   const leafL = leafMesh(1);
@@ -166,18 +147,24 @@ export function createMeadow(container, hooks) {
   leafR.position.set(GATE.x1, 0, PEN.z1);
   deco.add(leafL, leafR);
   let gateTarget = 0, gateNow = 0;
-  const sign = box(1.2, 0.5, 0.08, 0xe9d9b0, 0.5, TOP + 1.7, PEN.z1);
-  deco.add(sign, box(0.08, 1.2, 0.08, 0x8e623b, 0.5, TOP + 1.1, PEN.z1));
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.45, 0.07), mat(0xf0dca8));
+  sign.position.set(0.5, 1.55, PEN.z1);
+  sign.castShadow = true;
+  deco.add(sign, cyl(0.05, 1.5, 0x8e623b, -0.15, 0.75, PEN.z1), cyl(0.05, 1.5, 0x8e623b, 1.15, 0.75, PEN.z1));
+
+  const backTex = new THREE.TextureLoader().load('/assets/cards/back.png');
+  backTex.colorSpace = THREE.SRGBColorSpace;
 
   const actors = new Map();
   const tweens = [];
+  const held = new Set();
   let calm = false;
   let size = { w: 1, h: 1 };
   let stageBusy = false;
   const unclaimed = [];
   let deposit = null;
 
-  const penSpot = () => new THREE.Vector3(PEN.x0 + 0.7 + Math.random() * (PEN.x1 - PEN.x0 - 1.4), TOP, PEN.z0 + 0.7 + Math.random() * (PEN.z1 - PEN.z0 - 1.6));
+  const penSpot = () => new THREE.Vector3(PEN.x0 + 0.8 + Math.random() * (PEN.x1 - PEN.x0 - 1.6), TOP, PEN.z0 + 0.8 + Math.random() * (PEN.z1 - PEN.z0 - 1.8));
 
   function spawn(id, type = 'sheep', at = penSpot()) {
     const model = animalModel(type);
@@ -190,12 +177,12 @@ export function createMeadow(container, hooks) {
   }
 
   function puff(at) {
-    for (let i = 0; i < 10; i++) {
-      const c = box(0.22, 0.22, 0.22, 0xffffff, 0, 0, 0);
+    for (let i = 0; i < 9; i++) {
+      const c = sphere(0.16 + Math.random() * 0.1, 0xffffff);
       c.castShadow = false;
       c.position.copy(at).add(new THREE.Vector3(0, 0.6, 0));
       scene.add(c);
-      const v = new THREE.Vector3((Math.random() - 0.5) * 2.4, 1.5 + Math.random() * 1.5, (Math.random() - 0.5) * 2.4);
+      const v = new THREE.Vector3((Math.random() - 0.5) * 2.6, 1.4 + Math.random() * 1.6, (Math.random() - 0.5) * 2.6);
       const t0 = performance.now();
       tweens.push((now) => {
         const k = (now - t0) / 900;
@@ -223,15 +210,16 @@ export function createMeadow(container, hooks) {
     if (!n) return;
     deposit = new THREE.Group();
     deposit.userData.n = n;
+    const faceMat = new THREE.MeshBasicMaterial({ map: backTex });
     for (let i = 0; i < n; i++) {
-      const c = new THREE.Group();
-      c.add(box(0.78, 0.06, 1.1, 0xfff1d3), box(0.64, 0.08, 0.96, 0x3f9a58), box(0.34, 0.1, 0.3, 0xfff5db));
-      c.position.set((i - (n - 1) / 2) * 1.0, 0.05, 0);
-      c.rotation.y = (i - (n - 1) / 2) * 0.2;
+      const c = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 1.25), [mat(0xfff1d3), mat(0xfff1d3), faceMat, mat(0xfff1d3), mat(0xfff1d3), mat(0xfff1d3)]);
+      c.castShadow = true;
+      c.position.set((i - (n - 1) / 2) * 1.05, 0.05 + i * 0.02, 0);
+      c.rotation.y = (i - (n - 1) / 2) * 0.22;
       deposit.add(c);
     }
-    deposit.scale.setScalar(1.5);
     deposit.position.copy(DEPOSIT);
+    deposit.scale.setScalar(1.3);
     scene.add(deposit);
   }
 
@@ -263,7 +251,7 @@ export function createMeadow(container, hooks) {
     stageBusy = true;
     setDeposit(0);
     const group = cards.map((t, i) => {
-      const home = DEPOSIT.clone().add(new THREE.Vector3((i - (cards.length - 1) / 2) * 1.3, 0, 0));
+      const home = DEPOSIT.clone().add(new THREE.Vector3((i - (cards.length - 1) / 2) * 1.5, 0, 0));
       const id = `stage-${performance.now()}-${i}`;
       const a = spawn(id, 'sheep', home);
       Object.assign(a.userData, { stage: true, nextMove: Infinity, speed: 0 });
@@ -292,9 +280,8 @@ export function createMeadow(container, hooks) {
           d[i].a.userData.speed = 4.8;
           d[i].fled = true;
         }
-        const left = w.slice(k);
         const prey = sheep();
-        left.forEach((wolf, i) => {
+        w.slice(k).forEach((wolf, i) => {
           const victim = prey[i];
           if (!victim) return flee(wolf, 6);
           wolf.a.userData.target = victim.a.position.clone().add(new THREE.Vector3(0, 0, 0.8));
@@ -332,14 +319,17 @@ export function createMeadow(container, hooks) {
     return end;
   }
 
-  const ray = new THREE.Raycaster();
   renderer.domElement.addEventListener('pointerdown', (e) => {
     const r = renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-    ray.setFromCamera(ndc, camera);
-    const hits = ray.intersectObjects([...actors.values()].filter((a) => a.userData.type === 'sheep' && !a.userData.stage), true);
-    const id = hits[0]?.object.userData.actorId;
-    hooks.onPick?.(id ?? null);
+    const px = e.clientX - r.left, py = e.clientY - r.top;
+    let best = null, bestD = 44;
+    for (const [id, a] of actors) {
+      if (a.userData.type !== 'sheep' || a.userData.stage) continue;
+      const v = a.position.clone().add(new THREE.Vector3(0, 0.6, 0)).project(camera);
+      const d = Math.hypot(((v.x + 1) / 2) * r.width - px, ((1 - v.y) / 2) * r.height - py);
+      if (d < bestD) { bestD = d; best = id; }
+    }
+    hooks.onPick?.(best);
   });
 
   function resize() {
@@ -349,12 +339,12 @@ export function createMeadow(container, hooks) {
     renderer.setSize(w, h, false);
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
-    const view = 9.6;
-    const aspect = w / h;
-    camera.left = (-view * aspect) / 1.15;
-    camera.right = (view * aspect) / 1.15;
-    camera.top = view / 1.15;
-    camera.bottom = -view / 1.15;
+    camera.aspect = w / h;
+    const tanY = Math.tan((camera.fov * Math.PI) / 360);
+    const d = Math.max(11.6 / (tanY * camera.aspect), 6.3 / tanY);
+    const tilt = (52 * Math.PI) / 180;
+    camera.position.set(target.x, target.y + d * Math.sin(tilt), target.z + d * Math.cos(tilt));
+    camera.lookAt(target);
     camera.updateProjectionMatrix();
   }
   new ResizeObserver(resize).observe(container);
@@ -396,12 +386,12 @@ export function createMeadow(container, hooks) {
         let d = want - a.rotation.y;
         d = Math.atan2(Math.sin(d), Math.cos(d));
         a.rotation.y += d * Math.min(1, dt * 8);
-        body.position.y = Math.abs(Math.sin(now * 0.012 * (u.speed + 1))) * 0.08 * Math.min(2, u.speed);
+        body.position.y = Math.abs(Math.sin(now * 0.012 * (u.speed + 1))) * 0.07 * Math.min(2, u.speed);
       } else if (u.speed > 1 && !u.stage) u.speed = 0.6;
       if (anim && k >= 0 && k < 1) {
         if (anim.action === 'jump') body.position.y = Math.sin(k * Math.PI) * 0.9;
-        if (anim.action === 'dance') { body.rotation.z = Math.sin(k * Math.PI * 8) * 0.35; body.position.y = Math.abs(Math.sin(k * Math.PI * 8)) * 0.25; a.rotation.y += dt * 6; }
-        if (anim.action === 'sleep') { body.position.y = -0.12; body.rotation.z = 0.15; }
+        if (anim.action === 'dance') { body.rotation.z = Math.sin(k * Math.PI * 8) * 0.3; body.position.y = Math.abs(Math.sin(k * Math.PI * 8)) * 0.25; a.rotation.y += dt * 6; }
+        if (anim.action === 'sleep') { body.position.y = -0.1; body.rotation.z = 0.2; }
         if (anim.action === 'graze' && head) head.rotation.x = 0.9;
         if (anim.action === 'bleat') { body.scale.set(1 + Math.sin(k * Math.PI * 6) * 0.08, 1, 1); if (head) head.rotation.x = -0.4; }
       } else body.scale.set(1, 1, 1);
@@ -414,13 +404,19 @@ export function createMeadow(container, hooks) {
   return {
     setSheep,
     setDeposit,
+    hold(id, on) {
+      const a = actors.get(id);
+      if (!a) return;
+      if (on) { held.add(id); a.userData.speed = 0; a.userData.nextMove = Infinity; }
+      else { held.delete(id); a.userData.nextMove = performance.now() + 800; }
+    },
     animate,
     stage,
     setCalm: (v) => { calm = v; },
     screenOf(id) {
       const a = actors.get(id);
       if (!a) return null;
-      const v = a.position.clone().project(camera);
+      const v = a.position.clone().add(new THREE.Vector3(0, 0.6, 0)).project(camera);
       return { x: ((v.x + 1) / 2) * size.w, y: ((1 - v.y) / 2) * size.h };
     },
   };

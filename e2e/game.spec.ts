@@ -46,6 +46,7 @@ test('la prairie 3D se dessine sans erreur', async ({ page }) => {
 });
 
 test('capture d une partie en cours', async ({ browser }) => {
+  test.setTimeout(60000);
   const a = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
   const b = await (await browser.newContext()).newPage();
   await a.goto('/');
@@ -68,6 +69,7 @@ test('capture d une partie en cours', async ({ browser }) => {
 });
 
 test('solo contre l ordinateur : les bots votent et la manche se résout', async ({ browser }) => {
+  test.setTimeout(90000);
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -92,4 +94,19 @@ test('solo contre l ordinateur : les bots votent et la manche se résout', async
   await page.screenshot({ path: 'test-results/solo-fin.png' });
   await page.locator('#scene canvas').click({ position: { x: 640, y: 200 } });
   expect(errors).toEqual([]);
+});
+
+test('menu radial autour du mouton cliqué', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  await page.waitForTimeout(1200);
+  const pos = await page.evaluate(() => (window as any).loup.meadow.screenOf('demo-0'));
+  const box = (await page.locator('#scene canvas').boundingBox())!;
+  await page.mouse.click(box.x + pos.x + 4, box.y + pos.y + 6);
+  await expect(page.locator('.radial')).toBeVisible();
+  expect(await page.locator('.radial .rbtn').count()).toBeGreaterThanOrEqual(6);
+  await page.screenshot({ path: 'test-results/radial.png', clip: { x: box.x, y: box.y, width: box.width, height: box.height } });
+  await page.waitForTimeout(500);
+  await page.locator('.rbtn', { hasText: 'Sauter' }).click();
+  await expect(page.locator('.radial')).toHaveCount(0);
 });

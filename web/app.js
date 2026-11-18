@@ -38,22 +38,29 @@ const meadow = createMeadow($('#scene'), {
 });
 if (!displayCode) meadow.setSheep(Array.from({ length: 4 }, (_, i) => ({ id: `demo-${i}` })));
 
-function closeRadial() { $('#menu').innerHTML = ''; }
+window.loup = { meadow };
+let radialId = null;
+function closeRadial() { $('#menu').innerHTML = ''; if (radialId) meadow.hold(radialId, false); radialId = null; }
 addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeRadial(); closeRules(); } });
 
 function openRadial(id) {
-  const pos = meadow.screenOf(id);
-  if (!pos) return;
+  closeRadial();
+  const raw = meadow.screenOf(id);
+  if (!raw) return;
+  const sc = $('#scene');
+  const pos = { x: Math.min(Math.max(raw.x, 90), sc.clientWidth - 90), y: Math.min(Math.max(raw.y, 90), sc.clientHeight - 90) };
+  radialId = id;
+  meadow.hold(id, true);
   const sheep = snap?.sheep.find((s) => s.id === id);
   const canName = snap && snap.hostId === snap.you;
   const items = Object.entries(ACTIONS);
   const R = 70;
   const buttons = items.map(([k, v], i) => {
     const a = (-90 + (360 / items.length) * i) * (Math.PI / 180);
-    return `<button class="rbtn" data-a="${k}" role="menuitem" style="left:${Math.cos(a) * R}px;top:${Math.sin(a) * R}px">${v}</button>`;
+    return `<button class="rbtn" data-a="${k}" role="menuitem" style="left:calc(50% + ${Math.cos(a) * R}px);top:calc(50% + ${Math.sin(a) * R}px)">${v}</button>`;
   }).join('');
   const center = canName ? '<button class="rbtn rname" data-a="rename" aria-label="Donner un prénom">✎</button>' : '';
-  $('#menu').innerHTML = `<div class="radial" style="left:${pos.x}px;top:${pos.y - 20}px" role="menu" aria-label="Actions ${sheep?.name ?? 'du mouton'}">${buttons}${center}</div>`;
+  $('#menu').innerHTML = `<div class="radial" style="left:${pos.x}px;top:${pos.y}px" role="menu" aria-label="Actions ${sheep?.name ?? 'du mouton'}">${buttons}${center}</div>`;
   $('#menu').firstChild.onclick = (e) => {
     const a = e.target.closest('[data-a]')?.dataset.a;
     if (!a) return;
