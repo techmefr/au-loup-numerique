@@ -15,7 +15,7 @@ body::before{content:"";position:fixed;inset:0;background:repeating-conic-gradie
 .chip.gold b{color:var(--gold)}
 .opts{display:flex;gap:6px;align-items:center;font-size:12px}
 .opts label{background:var(--panel);border-radius:8px;padding:4px 8px;display:flex;gap:4px;align-items:center;cursor:pointer}
-.scene{position:relative;z-index:2;max-width:1000px;height:min(54vh,560px);min-height:280px;margin:0 auto;border:6px solid #0009;border-bottom-width:12px;border-radius:18px;background:#f1ebdd;overflow:hidden;box-shadow:0 0 0 4px var(--panel-l),0 20px 40px #000a}
+.scene{position:relative;z-index:2;max-width:1200px;height:min(68vh,720px);min-height:280px;margin:0 auto;border:6px solid #0009;border-bottom-width:12px;border-radius:18px;background:#f1ebdd;overflow:hidden;box-shadow:0 0 0 4px var(--panel-l),0 20px 40px #000a}
 .scene canvas{display:block;width:100%;height:100%;cursor:pointer;image-rendering:pixelated}
 .scene.big{height:min(80vh,760px)}
 #menu{position:absolute;z-index:5}
@@ -79,7 +79,7 @@ label.f{display:block;margin:8px 0}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .codebox{font-size:56px;font-weight:700;letter-spacing:8px;color:var(--gold);text-shadow:0 5px 0 var(--gold-d)}
 .qr{background:#fff;padding:6px;border-radius:8px;border:4px solid var(--ink)}
-@media (max-width:640px){.card{width:78px;height:112px;margin:0 -16px;font-size:42px}.card.mini{width:48px;height:70px}.logo{font-size:24px}.scene{height:38vh}}
+@media (max-width:640px){.card{width:78px;height:112px;margin:0 -16px;font-size:42px}.card.mini{width:48px;height:70px}.logo{font-size:24px}.scene{height:46vh}}
 .card:disabled{filter:none;cursor:default}
 .card.big{width:112px;height:158px;margin:0;--r:0deg;font-size:60px}
 .card.big .corner{font-size:22px}
@@ -122,10 +122,31 @@ select{font:inherit;font-size:18px;padding:8px;border-radius:8px;border:3px soli
 
 .splash{position:fixed;inset:0;z-index:50;background:radial-gradient(circle at 50% 40%,#3b5a3a,#14211a);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;color:#fff}
 .splash[hidden]{display:none}
-.splash img{max-width:80vw;height:auto;animation:bob 2s ease-in-out infinite}
+.splash img{max-width:80vw;height:auto;border-radius:18px;box-shadow:0 8px 24px #000a;animation:bob 2s ease-in-out infinite}
 .splash p{max-width:420px;margin:0}
 @keyframes bob{50%{transform:translateY(-8px)}}
 .mode{display:flex;flex-direction:column;gap:2px;padding:8px 10px;margin:6px 0;border-radius:8px;background:var(--panel);cursor:pointer}
 .mode span{font-size:12px;opacity:.85}
 .mode:has(input:checked){outline:2px solid #f2c14e}
 body.calm .splash img{animation:none}
+
+body.ingame{padding-bottom:0;overflow:hidden}
+body.ingame .scene{height:calc(100vh - 140px);min-height:340px;max-width:none;margin:0 8px;border-radius:14px}
+body.ingame #app{position:fixed;left:0;right:0;bottom:0;z-index:20;pointer-events:none;display:flex;flex-direction:column;align-items:center;padding:0 12px 6px}
+body.ingame #app>.panel{pointer-events:auto;background:#0b1812d9;backdrop-filter:blur(4px);margin:0;width:min(920px,100%);padding:6px 12px}
+body.ingame #app>.panel:has(.score){position:fixed;top:132px;left:18px;width:230px;padding:6px;font-size:14px}
+body.ingame #app>.panel h2{margin:2px 0;font-size:18px}
+body.ingame #app>.panel p{margin:2px 0;font-size:14px}
+body.ingame .hand{min-height:150px;padding:30px 0 4px}
+body.ingame .card{width:80px;height:112px}
+body.ingame .card.big{width:84px;height:118px}
+body.ingame .pile{min-height:130px}
+body.ingame .pile .card{width:70px;height:98px}
+body.ingame .verdict{font-size:24px;margin:2px 0}
+body.ingame .reveal-row{margin:4px 0}
+body.ingame #app>.err{display:none}
+#stack{position:fixed;right:22px;bottom:150px;z-index:21;pointer-events:none;display:flex;flex-direction:column;align-items:center;font-size:14px;color:var(--cream);text-shadow:0 2px 0 #000a}
+#stack .cards{position:relative;width:78px;height:104px}
+#stack img{position:absolute;left:calc(var(--i)*3px);top:calc(var(--i)*-3px);width:70px;height:98px;object-fit:contain;filter:drop-shadow(0 3px 2px #0008)}
+#stack b{font-size:26px;color:var(--gold)}
+@media (max-width:640px){body.ingame .scene{height:calc(100vh - 150px)}#stack{right:6px;bottom:150px}body.ingame #app>.panel:has(.score){display:none}}

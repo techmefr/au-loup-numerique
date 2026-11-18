@@ -202,7 +202,7 @@ function render() {
       : `<p class="center-text"><span class="claim">« Ce sont des moutons ! »</span></p>`;
     body = isAuthor
       ? `<div class="panel"><h2>À toi de jouer !</h2><p>Choisis 1 à 3 cartes à poser devant l'enclos.</p><div class="hand" id="hand">${fan(g.hand, true)}</div>${claimUi}
-        <div class="row center"><button id="play" ${selected.size < 1 ? 'disabled' : ''}>Poser ${selected.size} carte(s)</button></div></div>`
+        <div class="row center"><button id="play" ${selected.size < 1 ? 'disabled' : ''}>Envoyer ${selected.size ? '(' + selected.size + ')' : ''}</button></div></div>`
       : `<div class="panel"><h2>${pName(g.authorId)} choisit ses cartes…</h2><div class="hand" id="hand">${fan(g.hand, false)}</div></div>`;
   } else if (g.phase === 'voting') {
     const claim = g.claim.kind === 'all-sheep' ? 'Ce sont des moutons !' : `${g.claim.count} mouton(s) vont rentrer !`;
@@ -227,7 +227,9 @@ function render() {
   }
   const board = g.players.map((p) => `<li class="${p.id === you ? 'me' : ''} ${p.id === g.authorId && g.phase !== 'lobby' ? 'turn' : ''}"><span class="dot ${p.connected ? '' : 'off'}"></span><span>${p.bot ? '🤖 ' : ''}${p.name}${p.id === g.hostId ? ' 👑' : ''}${p.id === you ? ' (toi)' : ''}</span><span class="cards-left"><img src="assets/cards/back.png" alt="cartes en main" width="16" height="22"> ${p.cards}</span><span class="pts">🐑 ${p.score}</span></li>`).join('');
   const sheepList = g.sheep.map((s, i) => `<button class="sr" data-sheep="${s.id}">Mouton ${s.name || i + 1} : actions</button>`).join('');
-  app.innerHTML = (displayCode ? `<h2>Salle ${g.code}</h2>` : body) + `<div class="panel"><ul class="score">${board}</ul></div><div class="sr">${sheepList}</div><p class="err" role="alert">${err}</p>`;
+  document.body.classList.toggle('ingame', !displayCode && g.phase !== 'lobby');
+  const stack = !displayCode && (g.phase === 'select' || g.phase === 'voting') ? `<div id="stack" aria-label="Cartes restantes : ${g.hand.length}"><div class="cards">${Array.from({ length: Math.min(4, g.hand.length) }, (_, i) => `<img src="assets/cards/back.png" alt="" style="--i:${i}">`).join('')}</div><b>${g.hand.length}</b><span>restantes</span></div>` : '';
+  app.innerHTML = stack + (displayCode ? `<h2>Salle ${g.code}</h2>` : body) + `<div class="panel"><ul class="score">${board}</ul></div><div class="sr">${sheepList}</div><p class="err" role="alert">${err}</p>`;
   document.querySelectorAll('.sr [data-sheep]').forEach((b) => { b.onclick = () => openRadial(b.dataset.sheep); });
   if (displayCode) return;
   $('#start')?.addEventListener('click', () => send({ type: 'game:start' }));

@@ -260,7 +260,7 @@ export function createMeadow(container, hooks) {
     });
     const wait = calm ? 200 : 1100;
     const at = (ms, fn) => setTimeout(fn, ms);
-    at(wait, () => group.forEach((g) => { if (g.t !== 'sheep') swap(g, g.t); }));
+    at(wait, () => group.forEach((g) => { puff(g.a.position); if (g.t !== 'sheep') swap(g, g.t); }));
     const flee = (g, dx) => {
       g.a.userData.target = new THREE.Vector3(g.a.position.x + dx, TOP, g.a.position.z + 8);
       g.a.userData.speed = 4.5;
@@ -319,9 +319,35 @@ export function createMeadow(container, hooks) {
     return end;
   }
 
-  renderer.domElement.addEventListener('pointerdown', (e) => {
-    const r = renderer.domElement.getBoundingClientRect();
+  let zoom = 1, baseD = 20;
+  const ZOFF = 1.8;
+  const pan = { x: 0, z: ZOFF };
+  const view = new THREE.Vector3();
+  const tilt = (52 * Math.PI) / 180;
+  const clampView = () => {
+    zoom = Math.min(3, Math.max(0.7, zoom));
+    const lim = Math.max(0, 1 - 1 / zoom) * 9 + 1.5;
+    pan.x = Math.min(lim, Math.max(-lim, pan.x));
+    pan.z = Math.min(lim * 0.8 + ZOFF, Math.max(-lim * 0.8, pan.z));
+  };
+  function updateCamera() {
+    clampView();
+    const d = baseD / zoom;
+    view.set(target.x + pan.x, target.y, target.z + pan.z);
+    camera.position.set(view.x, view.y + d * Math.sin(tilt), view.z + d * Math.cos(tilt));
+    camera.lookAt(view);
+    camera.updateProjectionMatrix();
+  }
+  const dom = renderer.domElement;
+  dom.style.touchAction = 'none';
+  const pointers = new Map();
+  let drag = null, pinch = 0;
+  dom.addEventListener('pointerdown', (e) => {
+    const r = dom.getBoundingClientRect();
     const px = e.clientX - r.left, py = e.clientY - r.top;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    dom.setPointerCapture?.(e.pointerId);
+    if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); drag = null; return; }
     let best = null, bestD = 44;
     for (const [id, a] of actors) {
       if (a.userData.type !== 'sheep' || a.userData.stage) continue;
@@ -329,23 +355,44 @@ export function createMeadow(container, hooks) {
       const d = Math.hypot(((v.x + 1) / 2) * r.width - px, ((1 - v.y) / 2) * r.height - py);
       if (d < bestD) { bestD = d; best = id; }
     }
-    hooks.onPick?.(best);
+    if (best) { drag = null; hooks.onPick?.(best); return; }
+    hooks.onPick?.(null);
+    drag = { x: e.clientX, y: e.clientY };
   });
+  dom.addEventListener('pointermove', (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const n = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch) { zoom *= n / pinch; updateCamera(); }
+      pinch = n;
+      return;
+    }
+    if (!drag) return;
+    const k = (2 * (baseD / zoom) * Math.tan((camera.fov * Math.PI) / 360)) / size.h;
+    pan.x -= (e.clientX - drag.x) * k;
+    pan.z -= ((e.clientY - drag.y) * k) / Math.sin(tilt);
+    drag = { x: e.clientX, y: e.clientY };
+    updateCamera();
+  });
+  const release = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) pinch = 0; if (!pointers.size) drag = null; };
+  dom.addEventListener('pointerup', release);
+  dom.addEventListener('pointercancel', release);
+  dom.addEventListener('wheel', (e) => { e.preventDefault(); zoom *= Math.exp(-e.deltaY * 0.0015); updateCamera(); }, { passive: false });
+  dom.addEventListener('dblclick', () => { zoom = 1; pan.x = 0; pan.z = ZOFF; updateCamera(); });
 
   function resize() {
     const w = container.clientWidth, h = container.clientHeight;
     if (!w || !h) return;
     size = { w, h };
     renderer.setSize(w, h, false);
-    renderer.domElement.style.width = '100%';
-    renderer.domElement.style.height = '100%';
+    dom.style.width = '100%';
+    dom.style.height = '100%';
     camera.aspect = w / h;
     const tanY = Math.tan((camera.fov * Math.PI) / 360);
-    const d = Math.max(11.6 / (tanY * camera.aspect), 6.3 / tanY);
-    const tilt = (52 * Math.PI) / 180;
-    camera.position.set(target.x, target.y + d * Math.sin(tilt), target.z + d * Math.cos(tilt));
-    camera.lookAt(target);
-    camera.updateProjectionMatrix();
+    baseD = Math.max(12.4 / (tanY * camera.aspect), 6.8 / tanY);
+    updateCamera();
   }
   new ResizeObserver(resize).observe(container);
   resize();
