@@ -14,7 +14,7 @@ test('deux joueurs jouent une manche complète', async ({ browser }) => {
   await guest.goto(`/room/${code}`);
   await guest.fill('#name', 'Bob');
   await guest.click('#join');
-  await expect(host.getByText('Bob 🟢')).toBeVisible();
+  await expect(host.locator('.score li', { hasText: 'Bob' })).toBeVisible();
 
   await host.click('#start');
   await expect(host.getByText('À toi de jouer !')).toBeVisible();
@@ -29,8 +29,40 @@ test('deux joueurs jouent une manche complète', async ({ browser }) => {
   await guest.click('#vt');
   await expect(host.locator('.reveal')).toBeVisible();
   await expect(guest.locator('.reveal')).toBeVisible();
-  await expect(host.locator('.stage')).toBeVisible();
 
   await host.click('#next');
   await expect(guest.getByText('Bob choisit') .or(guest.getByText('À toi de jouer !'))).toBeVisible();
+});
+
+test('la prairie 3D se dessine sans erreur', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  await page.goto('/');
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: 'test-results/accueil.png' });
+  expect(errors).toEqual([]);
+  await expect(page.locator('#scene canvas')).toBeVisible();
+});
+
+test('capture d une partie en cours', async ({ browser }) => {
+  const a = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
+  const b = await (await browser.newContext()).newPage();
+  await a.goto('/');
+  await a.fill('#name', 'Alice');
+  await a.click('#create');
+  const code = (await a.locator('h2').first().innerText()).replace('Salle ', '');
+  await b.goto(`/room/${code}`);
+  await b.fill('#name', 'Bob');
+  await b.click('#join');
+  await a.click('#start');
+  await expect(a.getByText('À toi de jouer !')).toBeVisible();
+  await a.locator('#hand .card').nth(1).click();
+  await a.locator('#hand .card').nth(2).click();
+  await a.waitForTimeout(500);
+  await a.screenshot({ path: 'test-results/main.png' });
+  await a.click('#play');
+  await b.click('#vt');
+  await a.waitForTimeout(2300);
+  await a.screenshot({ path: 'test-results/revelation.png' });
 });

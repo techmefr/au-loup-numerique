@@ -10,7 +10,8 @@ import { GameError } from '../engine/game.js';
 import { Room, SHEEP_ACTIONS } from './room.js';
 
 const WEB = fileURLToPath(new URL('../../web', import.meta.url));
-const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
+const ROOT = fileURLToPath(new URL('../../', import.meta.url));
+const MIME: Record<string, string> = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 
 export const rooms = new Map<string, Room>();
 
@@ -49,7 +50,11 @@ export function createApp(port: number) {
       return;
     }
     if (path === '/' || path.startsWith('/room/') || path.startsWith('/display/')) path = '/index.html';
-    const file = join(WEB, normalize(path).replace(/^(\.\.[/\\])+/, ''));
+    const safe = normalize(path).replace(/^(\.\.[/\\])+/, '');
+    const vendor = /^[/\\]vendor[/\\](three|font)[/\\]([\w.-]+)$/.exec(safe);
+    const file = vendor
+      ? join(ROOT, 'node_modules', vendor[1] === 'three' ? 'three/build' : '@fontsource/pixelify-sans/files', vendor[2]!)
+      : join(WEB, safe);
     try {
       const data = await readFile(file);
       res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
