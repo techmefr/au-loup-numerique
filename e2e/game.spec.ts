@@ -21,14 +21,19 @@ test('deux joueurs jouent une manche complète', async ({ browser }) => {
   await expect(guest.getByText('Alice choisit ses cartes…')).toBeVisible();
   expect(await guest.locator('#hand .card').count()).toBe(10);
 
-  await host.locator('#hand .card').first().click();
+  const initialFlock = Number(await host.locator('#chips .gold b').innerText());
+  await host.getByRole('button', { name: 'Mouton', exact: true }).first().click();
   await host.click('#play');
   await expect(guest.locator('#pile')).toBeVisible();
   await expect(guest.locator('.reveal')).toHaveCount(0);
+  await expect.poll(() => guest.evaluate(() => Boolean((window as any).loup.meadow.screenOf('arrival-0')))).toBe(true);
 
   await guest.click('#vt');
-  await expect(host.locator('.reveal')).toBeVisible();
-  await expect(guest.locator('.reveal')).toBeVisible();
+  await expect(host.getByRole('heading', { name: 'Regarde le portail…' })).toBeVisible();
+  await expect(host.locator('#chips .gold b')).toHaveText(String(initialFlock));
+  await expect(host.locator('.reveal')).toBeVisible({ timeout: 10000 });
+  await expect(guest.locator('.reveal')).toBeVisible({ timeout: 10000 });
+  await expect(host.locator('#chips .gold b')).toHaveText(String(initialFlock + 1));
 
   await host.click('#next');
   await expect(guest.getByText('Bob choisit') .or(guest.getByText('À toi de jouer !'))).toBeVisible();

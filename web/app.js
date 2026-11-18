@@ -21,7 +21,7 @@ const url = new URL(location.href);
 const parts = url.pathname.split('/').filter(Boolean);
 const displayCode = parts[0] === 'display' ? parts[1] : null;
 let roomCode = parts[0] === 'room' ? parts[1] : null;
-let snap = null, selected = new Set(), claimCount = 1, err = '', autoNext = '', prefMode = 'ni-vu';
+let snap = null, selected = new Set(), claimCount = 1, err = '', prefMode = 'ni-vu';
 
 if (displayCode) $('#scene').classList.add('big');
 
@@ -41,6 +41,7 @@ if (!displayCode) meadow.setSheep(Array.from({ length: 6 }, (_, i) => ({ id: `de
 
 window.loup = { meadow };
 let radialId = null;
+let resolving = null;
 function closeRadial() { $('#menu').innerHTML = ''; if (radialId) meadow.hold(radialId, false); radialId = null; }
 addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeRadial(); closeRules(); } });
 
@@ -49,7 +50,8 @@ function openRadial(id) {
   const raw = meadow.screenOf(id);
   if (!raw) return;
   const sc = $('#scene');
-  const pos = { x: Math.min(Math.max(raw.x, 90), sc.clientWidth - 90), y: Math.min(Math.max(raw.y, 90), sc.clientHeight - 90) };
+  const inset = 101;
+  const pos = { x: Math.min(Math.max(raw.x, inset), sc.clientWidth - inset), y: Math.min(Math.max(raw.y, inset), sc.clientHeight - inset) };
   radialId = id;
   meadow.hold(id, true);
   const sheep = snap?.sheep.find((s) => s.id === id);
@@ -97,28 +99,31 @@ ws.onmessage = (e) => {
     const changed = !snap || snap.phase !== m.phase || snap.roundId !== m.roundId;
     snap = m; err = '';
     if (changed) selected.clear();
+    if (resolving && resolving.roundId !== m.roundId) resolving = null;
     meadow.setSheep(m.sheep.length || m.phase !== 'lobby' ? m.sheep : Array.from({ length: 6 }, (_, i) => ({ id: `demo-${i}` })));
     meadow.setDeposit(m.phase === 'voting' ? m.pile : 0);
     render();
-    maybeAutoNext();
+    if (changed && m.phase === 'voting' && m.authorId === m.you) showMeadowOnPhone();
   } else if (m.type === 'error') { err = ERR[m.code] || m.code; render(); }
   else if (m.type === 'meadow:sheep_action') meadow.animate(m.sheepId, m.action);
   else if (m.type === 'round:revealed') onRevealed(m.reveal);
 };
 
-function onRevealed(r) {
-  const eaten = r.resolution.sheepEaten, saved = r.resolution.sheepSaved;
-  beep(r.outcome === 'entered' ? (eaten ? 220 : 560) : 180);
-  meadow.stage(r);
-  closeRadial();
-  setTimeout(() => toast(r.outcome === 'entered' ? (saved ? `Le portail s'ouvre : ${saved} mouton(s) rentrent !` : 'Aucun mouton ne rentre…') : 'Le portail reste fermé !', 2600), 1500);
+function showMeadowOnPhone() {
+  if (matchMedia('(max-width: 850px)').matches) $('#scene').scrollIntoView({ block: 'start' });
 }
 
-function maybeAutoNext() {
-  if (!snap || snap.phase !== 'result' || snap.hostId !== snap.you) return;
-  if (!snap.players.every((p) => p.id === snap.you || p.bot) || autoNext === snap.roundId) return;
-  autoNext = snap.roundId;
-  setTimeout(() => { if (snap?.phase === 'result') send({ type: 'game:next' }); }, 7500);
+function onRevealed(r) {
+  const current = { roundId: snap.roundId, sheepCount: snap.sheep.length, players: snap.players };
+  resolving = current;
+  closeRadial();
+  showMeadowOnPhone();
+  meadow.stage(r, () => {
+    if (resolving !== current) return;
+    resolving = null;
+    beep(r.outcome === 'entered' ? (r.resolution.sheepEaten ? 220 : 560) : 180);
+    render();
+  });
 }
 
 function beep(freq) {
@@ -145,16 +150,14 @@ const chip = (label, value, cls = '') => `<div class="chip ${cls}"><small>${labe
 
 function hud() {
   $('#chips').innerHTML = snap
-    ? chip('SALLE', snap.code) + chip('MANCHE', snap.roundNo || '–') + chip('DANS L’ENCLOS', snap.sheep.length, 'gold') + chip('MODE', snap.mode === 'compte' ? 'COMPTE' : 'NI VU')
+    ? chip('SALLE', snap.code) + chip('MANCHE', snap.roundNo || '–') + chip('DANS L’ENCLOS', resolving?.sheepCount ?? snap.sheep.length, 'gold') + chip('MODE', snap.mode === 'compte' ? 'COMPTE' : 'NI VU')
     : '';
 }
 
-function fan(cards, interactive) {
-  const n = cards.length, mid = (n - 1) / 2;
-  const spread = n > 7 ? 3 : 5;
-  return cards.map((c, i) => {
-    const r = (i - mid) * spread, y = (i - mid) * (i - mid) * 2.5;
-    return cardHtml(c, selected.has(c.id) ? 'sel' : '', `style="--r:${r}deg;--y:${y}px" ${interactive ? '' : 'disabled'} aria-pressed="${selected.has(c.id)}"`);
+function handCards(cards, interactive) {
+  return cards.map((card) => {
+    const isSelected = selected.has(card.id);
+    return cardHtml(card, isSelected ? 'sel' : '', `${interactive ? '' : 'disabled'} aria-pressed="${isSelected}"`);
   }).join('');
 }
 
@@ -168,7 +171,6 @@ function render() {
   hud();
   document.body.classList.toggle('home', !displayCode && (!snap || snap.phase === 'lobby'));
   if (!snap) document.body.classList.remove('ingame');
-  meadow.setPanX(!displayCode && (!snap || snap.phase === 'lobby') && innerWidth > 900 ? -3 : 0);
   if (!snap) {
     if (displayCode) { app.innerHTML = '<div class="panel">Connexion à la salle…</div>'; return; }
     const s = saved();
@@ -204,9 +206,9 @@ function render() {
       ? `<div class="row center"><label>Moutons qui rentreront : <input type="text" id="cc" inputmode="numeric" value="${claimCount}" style="width:70px" aria-label="Nombre de moutons annoncé"></label></div>`
       : `<p class="center-text"><span class="claim">« Ce sont des moutons ! »</span></p>`;
     body = isAuthor
-      ? `<div class="panel"><h2>À toi de jouer !</h2><p>Choisis 1 à 3 cartes à poser devant l'enclos.</p><div class="hand" id="hand">${fan(g.hand, true)}</div>${claimUi}
+      ? `<div class="panel"><h2>À toi de jouer !</h2><p>Choisis 1 à 3 cartes à poser devant l'enclos.</p><div class="hand" id="hand">${handCards(g.hand, true)}</div>${claimUi}
         <div class="row center"><button id="play" ${selected.size < 1 ? 'disabled' : ''}>Envoyer ${selected.size ? '(' + selected.size + ')' : ''}</button></div></div>`
-      : `<div class="panel"><h2>${pName(g.authorId)} choisit ses cartes…</h2><div class="hand" id="hand">${fan(g.hand, false)}</div></div>`;
+      : `<div class="panel"><h2>${pName(g.authorId)} choisit ses cartes…</h2><div class="hand" id="hand">${handCards(g.hand, false)}</div></div>`;
   } else if (g.phase === 'voting') {
     const claim = g.claim.kind === 'all-sheep' ? 'Ce sont des moutons !' : `${g.claim.count} mouton(s) vont rentrer !`;
     const backs = Array.from({ length: g.pile }, (_, i) => `<div class="card back" style="--r:${(i - (g.pile - 1) / 2) * 8}deg" aria-hidden="true"><img src="assets/cards/back.png" alt="" draggable="false"></div>`).join('');
@@ -217,6 +219,8 @@ function render() {
       <div class="row center"><button class="red" id="vw">← AU LOUP !</button><button class="green" id="vt">Je valide →</button></div>`;
     else body += `<p>${isAuthor ? 'Les autres décident…' : 'Réponse enregistrée. En attente des autres…'}</p>`;
     body += '</div>';
+  } else if (resolving) {
+    body = '<div class="panel" role="status"><h2>Regarde le portail…</h2><p>La manche se joue dans la prairie.</p></div>';
   } else {
     const r = g.reveal;
     const win = g.winnerId ? `<div class="verdict good">${pName(g.winnerId)} n'a plus de cartes : VICTOIRE !</div>` : '';
@@ -228,11 +232,13 @@ function render() {
       <div class="row center">${isHost ? `<button class="gold" id="${g.phase === 'finished' ? 'again' : 'next'}">${g.phase === 'finished' ? 'Rejouer' : 'Manche suivante'}</button>` : '<span>En attente de l’hôte…</span>'}</div></div>`;
     if (g.phase === 'finished') body = body.replace('id="next"', 'id="again"');
   }
-  const board = g.players.map((p) => `<li class="${p.id === you ? 'me' : ''} ${p.id === g.authorId && g.phase !== 'lobby' ? 'turn' : ''}"><span class="dot ${p.connected ? '' : 'off'}"></span><span>${p.bot ? '🤖 ' : ''}${p.name}${p.id === g.hostId ? ' 👑' : ''}${p.id === you ? ' (toi)' : ''}</span><span class="cards-left"><img src="assets/cards/back.png" alt="cartes en main" width="16" height="22"> ${p.cards}</span><span class="pts">🐑 ${p.score}</span></li>`).join('');
-  const sheepList = g.sheep.map((s, i) => `<button class="sr" data-sheep="${s.id}">Mouton ${s.name || i + 1} : actions</button>`).join('');
+  const board = (resolving?.players ?? g.players).map((p) => `<li class="${p.id === you ? 'me' : ''} ${p.id === g.authorId && g.phase !== 'lobby' ? 'turn' : ''}"><span class="dot ${p.connected ? '' : 'off'}"></span><span>${p.bot ? '🤖 ' : ''}${p.name}${p.id === g.hostId ? ' 👑' : ''}${p.id === you ? ' (toi)' : ''}</span><span class="cards-left"><img src="assets/cards/back.png" alt="cartes en main" width="16" height="22"> ${p.cards}</span><span class="pts">🐑 ${p.score}</span></li>`).join('');
+  const sheepList = (resolving ? g.sheep.slice(0, resolving.sheepCount) : g.sheep).map((s, i) => `<button class="sr" data-sheep="${s.id}">Mouton ${s.name || i + 1} : actions</button>`).join('');
   document.body.classList.toggle('ingame', !displayCode && g.phase !== 'lobby');
-  const stack = !displayCode && (g.phase === 'select' || g.phase === 'voting') ? `<div id="stack" aria-label="Cartes restantes : ${g.hand.length}"><div class="cards">${Array.from({ length: Math.min(4, g.hand.length) }, (_, i) => `<img src="assets/cards/back.png" alt="" style="--i:${i}">`).join('')}</div><b>${g.hand.length}</b><span>restantes</span></div>` : '';
-  app.innerHTML = stack + (displayCode ? `<h2>Salle ${g.code}</h2>` : body) + `<div class="panel"><ul class="score">${board}</ul></div><div class="sr">${sheepList}</div><p class="err" role="alert">${err}</p>`;
+  const stack = !displayCode && (g.phase === 'select' || g.phase === 'voting')
+    ? `<div id="stack">Cartes restantes <b>${g.hand.length}</b></div>`
+    : '';
+  app.innerHTML = stack + (displayCode && !g.reveal ? `<h2>Salle ${g.code}</h2>` : body) + `<div class="panel"><ul class="score">${board}</ul></div><div class="sr">${sheepList}</div><p class="err" role="alert">${err}</p>`;
   document.querySelectorAll('.sr [data-sheep]').forEach((b) => { b.onclick = () => openRadial(b.dataset.sheep); });
   if (displayCode) return;
   $('#start')?.addEventListener('click', () => send({ type: 'game:start' }));

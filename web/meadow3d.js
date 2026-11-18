@@ -152,17 +152,14 @@ export function createMeadow(container, hooks) {
   sign.castShadow = true;
   deco.add(sign, cyl(0.05, 1.5, 0x8e623b, -0.15, 0.75, PEN.z1), cyl(0.05, 1.5, 0x8e623b, 1.15, 0.75, PEN.z1));
 
-  const backTex = new THREE.TextureLoader().load('assets/cards/back.png');
-  backTex.colorSpace = THREE.SRGBColorSpace;
-
   const actors = new Map();
   const tweens = [];
   const held = new Set();
   let calm = false;
   let size = { w: 1, h: 1 };
   let stageBusy = false;
-  const unclaimed = [];
-  let deposit = null;
+  const unclaimed = new Map();
+  let arrivals = [];
 
   const penSpot = () => new THREE.Vector3(PEN.x0 + 0.8 + Math.random() * (PEN.x1 - PEN.x0 - 1.6), TOP, PEN.z0 + 0.8 + Math.random() * (PEN.z1 - PEN.z0 - 1.8));
 
@@ -196,33 +193,37 @@ export function createMeadow(container, hooks) {
   }
 
   function setSheep(list) {
-    const visible = () => [...actors.values()].filter((x) => x.userData.type === "sheep").length;
-    for (const s of list) {
-      const a = actors.get(s.id);
-      if (a) { a.userData.name = s.name ?? ''; continue; }
-      if (visible() >= 28) continue;
-      if (stageBusy) { if (!unclaimed.includes(s.id)) unclaimed.push(s.id); continue; }
-      spawn(s.id, 'sheep').userData.name = s.name ?? '';
+    const flock = new Set(list.map(({ id }) => id));
+    for (const [id, actor] of actors) {
+      if (actor.userData.stage || flock.has(id)) continue;
+      scene.remove(actor);
+      actors.delete(id);
+      held.delete(id);
+    }
+    for (const id of unclaimed.keys()) if (!flock.has(id)) unclaimed.delete(id);
+    for (const sheep of list.slice(0, 28)) {
+      const actor = actors.get(sheep.id);
+      if (actor) actor.userData.name = sheep.name ?? '';
+      else if (stageBusy) unclaimed.set(sheep.id, sheep.name ?? '');
+      else spawn(sheep.id).userData.name = sheep.name ?? '';
     }
   }
 
-  function setDeposit(n) {
-    if (deposit && deposit.userData.n === n) return;
-    if (deposit) { scene.remove(deposit); deposit = null; }
-    if (!n) return;
-    deposit = new THREE.Group();
-    deposit.userData.n = n;
-    const faceMat = new THREE.MeshBasicMaterial({ map: backTex });
-    for (let i = 0; i < n; i++) {
-      const c = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 1.25), [mat(0xfff1d3), mat(0xfff1d3), faceMat, mat(0xfff1d3), mat(0xfff1d3), mat(0xfff1d3)]);
-      c.castShadow = true;
-      c.position.set((i - (n - 1) / 2) * 1.05, 0.05 + i * 0.02, 0);
-      c.rotation.y = (i - (n - 1) / 2) * 0.22;
-      deposit.add(c);
+  function setDeposit(count) {
+    if (arrivals.length === count) return;
+    for (const { id, a } of arrivals) {
+      scene.remove(a);
+      actors.delete(id);
     }
-    deposit.position.copy(DEPOSIT);
-    deposit.scale.setScalar(1.3);
-    scene.add(deposit);
+    arrivals = Array.from({ length: count }, (_, i) => {
+      const home = DEPOSIT.clone().add(new THREE.Vector3((i - (count - 1) / 2) * 1.25, 0, 0));
+      const id = `arrival-${i}`;
+      const start = calm ? home : home.clone().add(new THREE.Vector3(0, 0, 1.9 + i * 0.45));
+      const a = spawn(id, 'sheep', start);
+      Object.assign(a.userData, { stage: true, nextMove: Infinity, target: home, speed: 2.8 });
+      a.rotation.y = Math.PI;
+      return { id, a };
+    });
   }
 
   function animate(id, action) {
@@ -239,30 +240,25 @@ export function createMeadow(container, hooks) {
     const model = animalModel(type);
     model.position.copy(old.position);
     model.rotation.y = old.rotation.y;
-    model.userData = { ...model.userData, stage: true, type, nextMove: Infinity, target: old.position.clone(), speed: 0, anim: { action: 'jump', t0: performance.now() } };
+    model.userData = { ...model.userData, stage: true, type, nextMove: Infinity, target: old.position.clone(), speed: 0, anim: calm ? null : { action: 'jump', t0: performance.now() } };
     scene.remove(old);
     scene.add(model);
     actors.set(g.id, model);
-    puff(old.position);
+    if (!calm) puff(old.position);
     g.a = model;
   };
 
   function stage(reveal, done) {
-    const cards = reveal.cards;
     const entered = reveal.outcome === 'entered';
     stageBusy = true;
-    setDeposit(0);
-    const group = cards.map((t, i) => {
-      const home = DEPOSIT.clone().add(new THREE.Vector3((i - (cards.length - 1) / 2) * 1.5, 0, 0));
-      const id = `stage-${performance.now()}-${i}`;
-      const a = spawn(id, 'sheep', home);
-      Object.assign(a.userData, { stage: true, nextMove: Infinity, speed: 0 });
-      a.rotation.y = 0;
-      return { a, t, id, home };
-    });
-    const wait = calm ? 200 : 1100;
+    setDeposit(reveal.cards.length);
+    const group = arrivals.map((arrival, i) => ({ ...arrival, t: reveal.cards[i] }));
+    arrivals = [];
+    const wait = calm ? 60 : 600;
     const at = (ms, fn) => setTimeout(fn, ms);
-    at(wait, () => group.forEach((g) => { puff(g.a.position); if (g.t !== 'sheep') swap(g, g.t); }));
+    at(wait, () => group.forEach((g) => {
+      if (g.t !== 'sheep') swap(g, g.t);
+    }));
     const flee = (g, dx) => {
       g.a.userData.target = new THREE.Vector3(g.a.position.x + dx, TOP, g.a.position.z + 8);
       g.a.userData.speed = 4.5;
@@ -271,7 +267,7 @@ export function createMeadow(container, hooks) {
     const wolves = () => group.filter((g) => g.t === 'wolf');
     const dogs = () => group.filter((g) => g.t === 'dog');
     const sheep = () => group.filter((g) => g.t === 'sheep');
-    const chase = wait + (calm ? 400 : 1200);
+    const chase = wait + (calm ? 100 : 550);
     if (entered) {
       at(chase, () => {
         const w = wolves(), d = dogs();
@@ -288,26 +284,44 @@ export function createMeadow(container, hooks) {
           if (!victim) return flee(wolf, 6);
           wolf.a.userData.target = victim.a.position.clone().add(new THREE.Vector3(0, 0, 0.8));
           wolf.a.userData.speed = 4;
-          at(900, () => { puff(victim.a.position); scene.remove(victim.a); actors.delete(victim.id); victim.eaten = true; flee(wolf, 6); });
+          at(calm ? 40 : 500, () => { if (!calm) puff(victim.a.position); scene.remove(victim.a); actors.delete(victim.id); victim.eaten = true; flee(wolf, 6); });
         });
       });
-      at(chase + 2600, () => { gateTarget = 1; });
-      at(chase + 3300, () => {
+      at(chase + (calm ? 100 : 950), () => { gateTarget = 1; });
+      at(chase + (calm ? 200 : 1200), () => {
         for (const g of sheep().filter((s) => !s.eaten)) {
-          g.a.userData.target = penSpot();
-          g.a.userData.speed = 1.4;
+          const gate = new THREE.Vector3(0.5, TOP, PEN.z1 - 0.85);
+          g.a.userData.target = gate;
+          g.a.userData.speed = 3.6;
+          if (calm) g.a.position.copy(gate);
+          else at(950, () => {
+            g.a.userData.target = penSpot();
+            g.a.userData.speed = 2.2;
+          });
           g.a.userData.stage = false;
           g.a.userData.nextMove = performance.now() + 6000;
-          const real = unclaimed.shift();
-          if (real) { actors.delete(g.id); actors.set(real, g.a); g.a.userData.id = real; g.a.traverse((o) => { o.userData.actorId = real; }); }
+          const real = unclaimed.entries().next().value;
+          if (real) {
+            const [id, name] = real;
+            unclaimed.delete(id);
+            actors.delete(g.id);
+            actors.set(id, g.a);
+            g.a.userData.id = id;
+            g.a.userData.name = name;
+            g.a.traverse((o) => { o.userData.actorId = id; });
+          } else {
+            g.a.userData.stage = true;
+          }
         }
       });
-      at(chase + 5400, () => { gateTarget = 0; });
+      at(chase + (calm ? 400 : 2900), () => { gateTarget = 0; });
     } else {
-      at(chase + 600, () => wolves().forEach((g, i) => { g.a.userData.anim = { action: 'dance', t0: performance.now() + i * 100 }; }));
-      at(chase + 2200, () => group.forEach((g) => { puff(g.a.position); scene.remove(g.a); actors.delete(g.id); }));
+      if (!calm) {
+        at(chase + 300, () => wolves().forEach((g, i) => { g.a.userData.anim = { action: 'dance', t0: performance.now() + i * 100 }; }));
+        at(chase + 1350, () => group.forEach((g) => puff(g.a.position)));
+      }
     }
-    const end = entered ? chase + 6000 : chase + 2800;
+    const end = chase + (calm ? 450 : entered ? 3250 : 1550);
     at(end, () => {
       for (const g of group) {
         if (!g.a.userData.stage) continue;
@@ -315,7 +329,8 @@ export function createMeadow(container, hooks) {
         actors.delete(g.id);
       }
       stageBusy = false;
-      for (const id of unclaimed.splice(0)) spawn(id, 'sheep');
+      for (const [id, name] of unclaimed) spawn(id).userData.name = name;
+      unclaimed.clear();
       done?.();
     });
     return end;
@@ -407,7 +422,6 @@ export function createMeadow(container, hooks) {
     gateNow += (gateTarget - gateNow) * Math.min(1, dt * 4);
     leafL.rotation.y = gateNow * 1.5;
     leafR.rotation.y = -gateNow * 1.5;
-    if (deposit) deposit.position.y = TOP + Math.sin(now * 0.004) * 0.04;
     for (const a of actors.values()) {
       const u = a.userData;
       const body = u.body;
