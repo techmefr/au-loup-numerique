@@ -19,3 +19,14 @@ test('version GitHub Pages : solo dans le navigateur, sans serveur de jeu', asyn
   await page.locator('#hand, .reveal').first().waitFor();
   expect(bad).toEqual([]);
 });
+
+test('splash, choix du mode expliqué, bouton partager', async ({ page }) => {
+  await page.goto('http://localhost:4173/au-loup-numerique/?splash=1');
+  await expect(page.locator('#splash')).toBeVisible();
+  await page.click('#splash-play');
+  await expect(page.locator('#splash')).toBeHidden();
+  await expect(page.locator('.mode')).toHaveCount(2);
+  await expect(page.locator('#share')).toBeVisible();
+  await page.click('#rules-home');
+  await expect(page.locator('#rules')).toBeVisible();
+});

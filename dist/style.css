@@ -119,3 +119,13 @@ select{font:inherit;font-size:18px;padding:8px;border-radius:8px;border:3px soli
 .card{border:none;border-radius:12px;overflow:visible}
 .card.sel{box-shadow:none}
 .card.sel img{filter:drop-shadow(0 0 0 #0000) drop-shadow(0 0 6px var(--gold)) drop-shadow(0 0 3px var(--gold))}
+
+.splash{position:fixed;inset:0;z-index:50;background:radial-gradient(circle at 50% 40%,#3b5a3a,#14211a);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;color:#fff}
+.splash[hidden]{display:none}
+.splash img{max-width:80vw;height:auto;animation:bob 2s ease-in-out infinite}
+.splash p{max-width:420px;margin:0}
+@keyframes bob{50%{transform:translateY(-8px)}}
+.mode{display:flex;flex-direction:column;gap:2px;padding:8px 10px;margin:6px 0;border-radius:8px;background:var(--panel);cursor:pointer}
+.mode span{font-size:12px;opacity:.85}
+.mode:has(input:checked){outline:2px solid #f2c14e}
+body.calm .splash img{animation:none}

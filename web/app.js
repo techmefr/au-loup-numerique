@@ -4,6 +4,7 @@ const $ = (s) => document.querySelector(s);
 const app = $('#app');
 const NAME = { sheep: 'Mouton', wolf: 'Loup déguisé', dog: 'Chien déguisé' };
 const ACTIONS = { jump: 'Sauter', graze: 'Brouter', sleep: 'Dormir', bleat: 'Bêler', run: 'Courir', dance: 'Danser' };
+const MODE_INFO = { 'ni-vu': 'Tu annonces seulement « que des moutons ». Si un loup se cache dans le lot, ce n’est pas vrai. Le plus simple pour débuter.', compte: 'Tu annonces combien de moutons vont rentrer (0 à 3), en tenant compte du chien qui chasse le loup. Plus fin, plus de bluff.' };
 const MODES = { 'ni-vu': 'Ni vu ni mouton', compte: 'Compte tes moutons !' };
 const RULE_PAGES = [
   ['histoire.webp', 'Le principe en 4 images'],
@@ -172,8 +173,9 @@ function render() {
       <p>Pose 1 à 3 cartes devant l'enclos. Les autres décident : laisser entrer… ou crier AU LOUP !</p>
       <label class="f">Ton prénom<input type="text" id="name" maxlength="16" value="${s.name ?? ''}"></label>
       <fieldset class="modes"><legend>Mode de jeu</legend>
-        ${Object.entries(MODES).map(([k, v]) => `<label><input type="radio" name="mode" value="${k}" ${prefMode === k ? 'checked' : ''}> ${v}</label>`).join('')}
+        ${Object.entries(MODES).map(([k, v]) => `<label class="mode"><input type="radio" name="mode" value="${k}" ${prefMode === k ? 'checked' : ''}><b>${v}</b><span>${MODE_INFO[k]}</span></label>`).join('')}
       </fieldset>
+      <div class="row"><button id="rules-home">Voir les règles illustrées</button></div>
       <div class="row"><button id="solo" class="gold">Jouer contre l'ordinateur</button>
         <label class="inline">Adversaires <select id="bots"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></label></div>
       ${LOCAL ? '<p class="small">Version en ligne : tu joues contre les ordinateurs, directement dans ton navigateur. Le multijoueur entre amis demande le serveur (voir le README).</p>' : `<div class="row"><button id="create">Créer une partie entre amis</button></div>
@@ -182,6 +184,7 @@ function render() {
       <p class="err" role="alert">${err}</p></div>`;
     const name = () => { const n = $('#name').value.trim() || 'Mouton'; localStorage.setItem('loup', JSON.stringify({ ...saved(), name: n })); return n; };
     const mode = () => { prefMode = document.querySelector('[name=mode]:checked').value; return prefMode; };
+    $('#rules-home').onclick = () => $('#rules-open').click();
     $('#solo').onclick = () => send({ type: 'room:create', displayName: name(), voteSeconds: 60, mode: mode(), bots: Number($('#bots').value), solo: true });
     if (!LOCAL) $('#create').onclick = () => send({ type: 'room:create', displayName: name(), voteSeconds: 60, mode: mode() });
     if (!LOCAL) $('#join').onclick = () => send({ type: 'room:join', code: $('#code').value.trim().toUpperCase(), displayName: name() });
@@ -249,3 +252,15 @@ function render() {
   }
 }
 render();
+
+const splash = $('#splash');
+const hideSplash = () => { splash.hidden = true; };
+if (!displayCode && (!navigator.webdriver || url.searchParams.has('splash')) && !roomCode) splash.hidden = false;
+$('#splash-play').onclick = hideSplash;
+$('#splash-rules').onclick = () => { hideSplash(); $('#rules-open').click(); };
+$('#share').onclick = async () => {
+  const link = snap && !LOCAL ? `${location.origin}/room/${snap.code}` : location.origin + location.pathname.replace(/\/(room|display)\/.*$/, '/');
+  const data = { title: 'AU LOUP !', text: 'Viens jouer à AU LOUP !', url: link };
+  try { if (navigator.share) { await navigator.share(data); return; } } catch { return; }
+  try { await navigator.clipboard.writeText(link); toast('Lien copié !'); } catch { prompt('Copie ce lien', link); }
+};
