@@ -196,9 +196,11 @@ export function createMeadow(container, hooks) {
   }
 
   function setSheep(list) {
+    const visible = () => [...actors.values()].filter((x) => x.userData.type === "sheep").length;
     for (const s of list) {
       const a = actors.get(s.id);
       if (a) { a.userData.name = s.name ?? ''; continue; }
+      if (visible() >= 28) continue;
       if (stageBusy) { if (!unclaimed.includes(s.id)) unclaimed.push(s.id); continue; }
       spawn(s.id, 'sheep').userData.name = s.name ?? '';
     }

@@ -168,7 +168,7 @@ function render() {
   hud();
   document.body.classList.toggle('home', !displayCode && (!snap || snap.phase === 'lobby'));
   if (!snap) document.body.classList.remove('ingame');
-  meadow.setPanX(!displayCode && (!snap || snap.phase === 'lobby') && innerWidth > 900 ? -4 : 0);
+  meadow.setPanX(!displayCode && (!snap || snap.phase === 'lobby') && innerWidth > 900 ? -3 : 0);
   if (!snap) {
     if (displayCode) { app.innerHTML = '<div class="panel">Connexion à la salle…</div>'; return; }
     const s = saved();

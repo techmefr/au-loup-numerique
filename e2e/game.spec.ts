@@ -111,3 +111,28 @@ test('menu radial autour du mouton cliqué', async ({ page }) => {
   await page.locator('.rbtn', { hasText: 'Sauter' }).click();
   await expect(page.locator('.radial')).toHaveCount(0);
 });
+
+test('mode Compte tes moutons : annonce chiffrée, vote, résolution', async ({ browser }) => {
+  test.setTimeout(90000);
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.fill('#name', 'Alice');
+  await page.check('input[name=mode][value=compte]');
+  await page.click('#solo');
+  await expect(page.getByText('À toi de jouer !')).toBeVisible();
+  await expect(page.locator('#cc')).toBeVisible();
+  await page.locator('#hand .card').first().click();
+  await page.locator('#hand .card').nth(1).click();
+  await page.fill('#cc', '2');
+  await page.click('#play');
+  await expect(page.getByText('2 mouton(s) vont rentrer !')).toBeVisible();
+  await expect(page.locator('.reveal')).toBeVisible({ timeout: 15000 });
+  await page.screenshot({ path: 'test-results/compte.png' });
+  const verdict = await page.locator('.verdict').first().innerText();
+  const cards = await page.locator('.reveal-row .card').count();
+  console.log('verdict', verdict, 'cartes', cards, await page.locator('.reveal p').first().innerText());
+  expect(cards).toBe(2);
+  expect(errors).toEqual([]);
+});
