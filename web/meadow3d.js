@@ -55,7 +55,7 @@ function animalModel(type) {
   }
   body.add(head);
   g.userData.body = body;
-  g.scale.setScalar(1.7);
+  g.scale.setScalar(1.3);
   return g;
 }
 
@@ -326,7 +326,7 @@ export function createMeadow(container, hooks) {
   const tilt = (52 * Math.PI) / 180;
   const clampView = () => {
     zoom = Math.min(3, Math.max(0.7, zoom));
-    const lim = Math.max(0, 1 - 1 / zoom) * 9 + 1.5;
+    const lim = Math.max(0, 1 - 1 / zoom) * 9 + 4.5;
     pan.x = Math.min(lim, Math.max(-lim, pan.x));
     pan.z = Math.min(lim * 0.8 + ZOFF, Math.max(-lim * 0.8, pan.z));
   };
@@ -391,7 +391,7 @@ export function createMeadow(container, hooks) {
     dom.style.height = '100%';
     camera.aspect = w / h;
     const tanY = Math.tan((camera.fov * Math.PI) / 360);
-    baseD = Math.max(12.4 / (tanY * camera.aspect), 6.8 / tanY);
+    baseD = Math.max(10.8 / (tanY * camera.aspect), 6.2 / tanY);
     updateCamera();
   }
   new ResizeObserver(resize).observe(container);
@@ -460,6 +460,7 @@ export function createMeadow(container, hooks) {
     animate,
     stage,
     setCalm: (v) => { calm = v; },
+    setPanX: (x) => { pan.x = x; updateCamera(); },
     screenOf(id) {
       const a = actors.get(id);
       if (!a) return null;

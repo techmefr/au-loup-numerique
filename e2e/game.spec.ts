@@ -99,6 +99,7 @@ test('solo contre l ordinateur : les bots votent et la manche se résout', async
 test('menu radial autour du mouton cliqué', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
+  await page.addStyleTag({ content: '#app{display:none!important}' });
   await page.waitForTimeout(1200);
   const pos = await page.evaluate(() => (window as any).loup.meadow.screenOf('demo-0'));
   const box = (await page.locator('#scene canvas').boundingBox())!;

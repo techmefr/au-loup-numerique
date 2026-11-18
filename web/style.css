@@ -130,7 +130,7 @@ select{font:inherit;font-size:18px;padding:8px;border-radius:8px;border:3px soli
 .mode:has(input:checked){outline:2px solid #f2c14e}
 body.calm .splash img{animation:none}
 
-body.ingame{padding-bottom:0;overflow:hidden}
+body:is(.ingame,.home){padding-bottom:0;overflow:hidden}
 body.ingame .scene{height:calc(100vh - 140px);min-height:340px;max-width:none;margin:0 8px;border-radius:14px}
 body.ingame #app{position:fixed;left:0;right:0;bottom:0;z-index:20;pointer-events:none;display:flex;flex-direction:column;align-items:center;padding:0 12px 6px}
 body.ingame #app>.panel{pointer-events:auto;background:#0b1812d9;backdrop-filter:blur(4px);margin:0;width:min(920px,100%);padding:6px 12px}
@@ -150,3 +150,24 @@ body.ingame #app>.err{display:none}
 #stack img{position:absolute;left:calc(var(--i)*3px);top:calc(var(--i)*-3px);width:70px;height:98px;object-fit:contain;filter:drop-shadow(0 3px 2px #0008)}
 #stack b{font-size:26px;color:var(--gold)}
 @media (max-width:640px){body.ingame .scene{height:calc(100vh - 150px)}#stack{right:6px;bottom:150px}body.ingame #app>.panel:has(.score){display:none}}
+body:is(.ingame,.home) header.hud{flex-wrap:nowrap;max-width:none;padding:6px 12px;gap:10px}
+body:is(.ingame,.home) header.hud .logo{height:44px}
+body:is(.ingame,.home) header.hud #chips{margin-left:auto;gap:6px}
+body:is(.ingame,.home) header.hud #chips>*{transform:scale(.85);transform-origin:right center}
+body:is(.ingame,.home) .scene{height:calc(100vh - 78px);min-height:340px;max-width:none;margin:0 8px;border-radius:14px}
+body.ingame #app>.panel:has(.score){top:84px}
+@media (max-width:760px){body:is(.ingame,.home) header.hud #chips{display:none}body:is(.ingame,.home) header.hud .opts label{display:none}}
+
+body.home #app{position:fixed;inset:78px 0 0 0;z-index:20;pointer-events:none;display:flex;align-items:center;justify-content:center;padding:8px}
+body.home #app>.panel{pointer-events:auto;background:#0b1812e6;backdrop-filter:blur(5px);margin:0;width:min(560px,100%);max-height:calc(100vh - 100px);overflow:auto;padding:14px 18px}
+body.home #app>.panel h2{margin:0 0 6px}
+body.home #app>.sr,body.home #app>.err{display:none}
+body.home #app{flex-direction:column;gap:8px}
+body.home #app>.panel:has(.score){font-size:14px;padding:6px 10px}
+body.home .mode{padding:6px 10px;margin:4px 0}
+body.home .mode span{display:block}
+body.home .mode b{display:block}
+body.home .row{margin:8px 0}
+body.home #name,body.home input[type=text]{width:100%;box-sizing:border-box}
+
+@media (min-width:900px){body.home #app{justify-content:flex-start;padding-left:4vw}}
