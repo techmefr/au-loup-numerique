@@ -109,3 +109,7 @@ Cartes : 36 moutons, 16 loups déguisés, 8 chiens déguisés, dos identiques. C
 Adversaires ordinateur : « Jouer contre l'ordinateur » crée une salle avec 1 à 7 joueurs contrôlés par le serveur (bluff 35 %, vote selon la taille de la pile et les cartes restantes au poseur).
 
 Pas encore implémentés : modes 3 à 6 du fascicule (consultables dans « Règles illustrées »), qui restent à valider avec l'auteur. Les visuels (cartes, logo, pages de règles) sont issus des images fournies par l'auteur (`web/assets`), le décor 3D est en voxels générés dans le code.
+
+## GitHub Pages
+
+La version Pages tourne entièrement dans le navigateur (solo contre l ordinateur, sans serveur). `pnpm build:pages` génère `dist/`, déployé par `.github/workflows/pages.yml`. Le multijoueur en salle demande le serveur (`pnpm start`).

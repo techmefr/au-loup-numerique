@@ -1,4 +1,4 @@
-import { createMeadow } from '/meadow3d.js';
+import { createMeadow } from './meadow3d.js';
 
 const $ = (s) => document.querySelector(s);
 const app = $('#app');
@@ -74,7 +74,8 @@ function openRadial(id) {
   $('#menu').querySelector('button')?.focus();
 }
 
-const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
+const LOCAL = location.hostname.endsWith('github.io') || url.searchParams.has('local');
+const ws = LOCAL ? new (await import('./local.js')).LocalSocket() : new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
 const send = (m) => ws.readyState === 1 && ws.send(JSON.stringify(m));
 const saved = () => { try { return JSON.parse(localStorage.getItem('loup') || '{}'); } catch { return {}; } };
 
@@ -90,7 +91,7 @@ ws.onmessage = (e) => {
   if (m.type === 'room:joined') {
     roomCode = m.code;
     localStorage.setItem('loup', JSON.stringify({ code: m.code, token: m.resumeToken, name: saved().name }));
-    history.replaceState(null, '', `/room/${m.code}`);
+    if (!LOCAL) history.replaceState(null, '', `/room/${m.code}`);
   } else if (m.type === 'room:snapshot') {
     const changed = !snap || snap.phase !== m.phase || snap.roundId !== m.roundId;
     snap = m; err = '';
@@ -130,14 +131,14 @@ applyCalm();
 
 function closeRules() { $('#rules').hidden = true; }
 $('#rules-open').onclick = () => {
-  $('#rules-body').innerHTML = RULE_PAGES.map(([f, t]) => `<figure><img src="/assets/rules/${f}" alt="${t}" loading="lazy"><figcaption>${t}</figcaption></figure>`).join('');
+  $('#rules-body').innerHTML = RULE_PAGES.map(([f, t]) => `<figure><img src="assets/rules/${f}" alt="${t}" loading="lazy"><figcaption>${t}</figcaption></figure>`).join('');
   $('#rules').hidden = false;
   $('#rules-close').focus();
 };
 $('#rules-close').onclick = closeRules;
 
 const pName = (id) => snap.players.find((p) => p.id === id)?.name ?? '?';
-const cardImg = (type) => `<img src="/assets/cards/${type}.png" alt="" draggable="false">`;
+const cardImg = (type) => `<img src="assets/cards/${type}.png" alt="" draggable="false">`;
 const cardHtml = (c, extra = '', attrs = '') => `<button class="card ${extra}" ${attrs} data-id="${c.id ?? ''}" aria-label="${NAME[c.type]}">${cardImg(c.type)}</button>`;
 const chip = (label, value, cls = '') => `<div class="chip ${cls}"><small>${label}</small><b>${value}</b></div>`;
 
@@ -175,22 +176,22 @@ function render() {
       </fieldset>
       <div class="row"><button id="solo" class="gold">Jouer contre l'ordinateur</button>
         <label class="inline">Adversaires <select id="bots"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></label></div>
-      <div class="row"><button id="create">Créer une partie entre amis</button></div>
+      ${LOCAL ? '<p class="small">Version en ligne : tu joues contre les ordinateurs, directement dans ton navigateur. Le multijoueur entre amis demande le serveur (voir le README).</p>' : `<div class="row"><button id="create">Créer une partie entre amis</button></div>
       <label class="f">Code de la salle<input type="text" id="code" maxlength="4" value="${roomCode ?? ''}" style="text-transform:uppercase"></label>
-      <div class="row"><button id="join" class="green">Rejoindre une partie</button></div>
+      <div class="row"><button id="join" class="green">Rejoindre une partie</button></div>`}
       <p class="err" role="alert">${err}</p></div>`;
     const name = () => { const n = $('#name').value.trim() || 'Mouton'; localStorage.setItem('loup', JSON.stringify({ ...saved(), name: n })); return n; };
     const mode = () => { prefMode = document.querySelector('[name=mode]:checked').value; return prefMode; };
     $('#solo').onclick = () => send({ type: 'room:create', displayName: name(), voteSeconds: 60, mode: mode(), bots: Number($('#bots').value), solo: true });
-    $('#create').onclick = () => send({ type: 'room:create', displayName: name(), voteSeconds: 60, mode: mode() });
-    $('#join').onclick = () => send({ type: 'room:join', code: $('#code').value.trim().toUpperCase(), displayName: name() });
+    if (!LOCAL) $('#create').onclick = () => send({ type: 'room:create', displayName: name(), voteSeconds: 60, mode: mode() });
+    if (!LOCAL) $('#join').onclick = () => send({ type: 'room:join', code: $('#code').value.trim().toUpperCase(), displayName: name() });
     return;
   }
   const g = snap, you = g.you, isAuthor = g.authorId === you, isHost = g.hostId === you;
   let body = '';
   if (g.phase === 'lobby') {
     const link = `${location.origin}/room/${g.code}`;
-    body = `<div class="panel"><h2>Salle ${g.code}</h2><div class="row"><img class="qr" src="/qr/${g.code}.svg" alt="QR code pour rejoindre la salle ${g.code}" width="150" height="150"><div><div class="codebox" aria-hidden="true">${g.code}</div><p>Mode : ${MODES[g.mode]}</p><p>Lien : <a href="${link}">${link}</a></p><p>Écran partagé : <a href="/display/${g.code}" target="_blank">/display/${g.code}</a></p></div></div>
+    body = `<div class="panel"><h2>Salle ${g.code}</h2><div class="row">${LOCAL ? '' : `<img class="qr" src="qr/${g.code}.svg" alt="QR code pour rejoindre la salle ${g.code}" width="150" height="150">`}<div><div class="codebox" aria-hidden="true">${g.code}</div><p>Mode : ${MODES[g.mode]}</p><p>Lien : <a href="${link}">${link}</a></p><p>Écran partagé : <a href="/display/${g.code}" target="_blank">/display/${g.code}</a></p></div></div>
       ${isHost ? `<button id="start" class="gold" ${g.players.length < 2 ? 'disabled' : ''}>Lancer la partie (${g.players.length} joueurs)</button>` : '<p>En attente de l’hôte…</p>'}</div>`;
   } else if (g.phase === 'select') {
     const claimUi = g.mode === 'compte'
@@ -202,7 +203,7 @@ function render() {
       : `<div class="panel"><h2>${pName(g.authorId)} choisit ses cartes…</h2><div class="hand" id="hand">${fan(g.hand, false)}</div></div>`;
   } else if (g.phase === 'voting') {
     const claim = g.claim.kind === 'all-sheep' ? 'Ce sont des moutons !' : `${g.claim.count} mouton(s) vont rentrer !`;
-    const backs = Array.from({ length: g.pile }, (_, i) => `<div class="card back" style="--r:${(i - (g.pile - 1) / 2) * 8}deg" aria-hidden="true"><img src="/assets/cards/back.png" alt="" draggable="false"></div>`).join('');
+    const backs = Array.from({ length: g.pile }, (_, i) => `<div class="card back" style="--r:${(i - (g.pile - 1) / 2) * 8}deg" aria-hidden="true"><img src="assets/cards/back.png" alt="" draggable="false"></div>`).join('');
     body = `<div class="panel"><h2>${pName(g.authorId)} pose ${g.pile} carte(s) devant l'enclos</h2><p><span class="claim">« ${claim} »</span></p>
       <div class="pile" id="pile">${backs}</div>
       <p>Réponses : ${g.voted}/${g.voters}</p>`;
@@ -221,7 +222,7 @@ function render() {
       <div class="row center">${isHost ? `<button class="gold" id="${g.phase === 'finished' ? 'again' : 'next'}">${g.phase === 'finished' ? 'Rejouer' : 'Manche suivante'}</button>` : '<span>En attente de l’hôte…</span>'}</div></div>`;
     if (g.phase === 'finished') body = body.replace('id="next"', 'id="again"');
   }
-  const board = g.players.map((p) => `<li class="${p.id === you ? 'me' : ''} ${p.id === g.authorId && g.phase !== 'lobby' ? 'turn' : ''}"><span class="dot ${p.connected ? '' : 'off'}"></span><span>${p.bot ? '🤖 ' : ''}${p.name}${p.id === g.hostId ? ' 👑' : ''}${p.id === you ? ' (toi)' : ''}</span><span class="cards-left"><img src="/assets/cards/back.png" alt="cartes en main" width="16" height="22"> ${p.cards}</span><span class="pts">🐑 ${p.score}</span></li>`).join('');
+  const board = g.players.map((p) => `<li class="${p.id === you ? 'me' : ''} ${p.id === g.authorId && g.phase !== 'lobby' ? 'turn' : ''}"><span class="dot ${p.connected ? '' : 'off'}"></span><span>${p.bot ? '🤖 ' : ''}${p.name}${p.id === g.hostId ? ' 👑' : ''}${p.id === you ? ' (toi)' : ''}</span><span class="cards-left"><img src="assets/cards/back.png" alt="cartes en main" width="16" height="22"> ${p.cards}</span><span class="pts">🐑 ${p.score}</span></li>`).join('');
   const sheepList = g.sheep.map((s, i) => `<button class="sr" data-sheep="${s.id}">Mouton ${s.name || i + 1} : actions</button>`).join('');
   app.innerHTML = (displayCode ? `<h2>Salle ${g.code}</h2>` : body) + `<div class="panel"><ul class="score">${board}</ul></div><div class="sr">${sheepList}</div><p class="err" role="alert">${err}</p>`;
   document.querySelectorAll('.sr [data-sheep]').forEach((b) => { b.onclick = () => openRadial(b.dataset.sheep); });

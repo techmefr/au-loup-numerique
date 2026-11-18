@@ -2,40 +2,15 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomInt } from 'node:crypto';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { z } from 'zod';
 import QRCode from 'qrcode';
-import { GameError } from '../engine/game.js';
-import { Room, SHEEP_ACTIONS } from './room.js';
+import { createSession, rooms } from './session.js';
+
+export { rooms };
 
 const WEB = fileURLToPath(new URL('../../web', import.meta.url));
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const MIME: Record<string, string> = { '.woff2': 'font/woff2', '.png': 'image/png', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
-
-export const rooms = new Map<string, Room>();
-
-const claim = z.union([z.object({ kind: z.literal('all-sheep') }), z.object({ kind: z.literal('survivors'), count: z.number().int().min(0).max(3) })]);
-
-const message = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('room:create'), displayName: z.string().max(16), voteSeconds: z.number().int().min(0).max(120).optional(), mode: z.enum(['ni-vu', 'compte']).optional(), bots: z.number().int().min(0).max(7).optional(), solo: z.boolean().optional() }),
-  z.object({ type: z.literal('room:join'), code: z.string().max(8), displayName: z.string().max(16), resumeToken: z.string().optional() }),
-  z.object({ type: z.literal('display:attach'), code: z.string().max(8) }),
-  z.object({ type: z.literal('game:start') }),
-  z.object({ type: z.literal('game:next') }),
-  z.object({ type: z.literal('cards:submit'), roundId: z.string(), cardIds: z.array(z.string()).min(1).max(3), claim }),
-  z.object({ type: z.literal('vote:submit'), roundId: z.string(), choice: z.enum(['wolf', 'trust']) }),
-  z.object({ type: z.literal('sheep:action'), sheepId: z.string(), action: z.enum(SHEEP_ACTIONS) }),
-  z.object({ type: z.literal('sheep:rename'), sheepId: z.string(), name: z.string().max(16) }),
-]);
-
-function newCode(): string {
-  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  for (;;) {
-    const code = Array.from({ length: 4 }, () => letters[randomInt(letters.length)]).join('');
-    if (!rooms.has(code)) return code;
-  }
-}
 
 export function createApp(port: number) {
   const http = createServer(async (req, res) => {
@@ -66,69 +41,9 @@ export function createApp(port: number) {
   const wss = new WebSocketServer({ server: http });
 
   wss.on('connection', (ws: WebSocket) => {
-    let room: Room | null = null;
-    let playerId = '';
-    const send = (m: unknown) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(m));
-    const err = (code: string) => send({ type: 'error', code });
-
-    ws.on('message', (raw) => {
-      let parsed;
-      try {
-        parsed = message.safeParse(JSON.parse(String(raw)));
-      } catch {
-        return err('bad_json');
-      }
-      if (!parsed.success) return err('bad_message');
-      const m = parsed.data;
-      try {
-        switch (m.type) {
-          case 'room:create': {
-            room = new Room(newCode());
-            room.voteSeconds = m.voteSeconds ?? 0;
-            room.game.mode = m.mode ?? 'ni-vu';
-            rooms.set(room.code, room);
-            const j = room.join(m.displayName, send);
-            playerId = j.id;
-            send({ type: 'room:joined', code: room.code, playerId, resumeToken: j.token });
-            room.addBots(m.bots ?? 0);
-            if (m.solo) room.start(playerId);
-            else room.broadcast();
-            break;
-          }
-          case 'room:join': {
-            const target = rooms.get(m.code.toUpperCase());
-            if (!target) return err('room_not_found');
-            room = target;
-            const j = room.join(m.displayName, send, m.resumeToken);
-            playerId = j.id;
-            send({ type: 'room:joined', code: room.code, playerId, resumeToken: j.token });
-            break;
-          }
-          case 'display:attach': {
-            const target = rooms.get(m.code.toUpperCase());
-            if (!target) return err('room_not_found');
-            target.attachDisplay(send);
-            break;
-          }
-          default: {
-            if (!room) return err('no_room');
-            if (m.type === 'game:start') room.start(playerId);
-            else if (m.type === 'game:next') room.next(playerId);
-            else if (m.type === 'cards:submit') {
-              if (m.roundId !== room.game.roundId) return err('stale_round');
-              room.submit(playerId, m.cardIds, m.claim);
-            } else if (m.type === 'vote:submit') {
-              if (m.roundId !== room.game.roundId) return err('stale_round');
-              room.vote(playerId, m.choice);
-            } else if (m.type === 'sheep:action') room.sheepAction(playerId, m.sheepId, m.action);
-            else if (m.type === 'sheep:rename') room.rename(playerId, m.sheepId, m.name);
-          }
-        }
-      } catch (e) {
-        err(e instanceof GameError ? e.message : 'internal');
-      }
-    });
-    ws.on('close', () => room && playerId && room.leave(playerId));
+    const session = createSession((m) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(m)); });
+    ws.on('message', (raw) => session.handle(String(raw)));
+    ws.on('close', () => session.close());
   });
 
   return new Promise<{ close: () => void; port: number }>((resolve) => {

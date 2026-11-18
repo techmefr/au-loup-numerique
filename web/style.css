@@ -1,5 +1,5 @@
-@font-face{font-family:Pixelify;src:url(/vendor/font/pixelify-sans-latin-400-normal.woff2) format("woff2");font-weight:400}
-@font-face{font-family:Pixelify;src:url(/vendor/font/pixelify-sans-latin-700-normal.woff2) format("woff2");font-weight:700}
+@font-face{font-family:Pixelify;src:url(vendor/font/pixelify-sans-latin-400-normal.woff2) format("woff2");font-weight:400}
+@font-face{font-family:Pixelify;src:url(vendor/font/pixelify-sans-latin-700-normal.woff2) format("woff2");font-weight:700}
 :root{--felt:#0f3d2e;--felt-d:#072419;--panel:#1c2b2a;--panel-l:#2b4240;--cream:#FFF1D3;--ink:#1a1411;--blue:#3d7ee0;--blue-d:#1f4a95;--red:#e0453a;--red-d:#8f241d;--gold:#f5c542;--gold-d:#a07a12;--green:#4caf50;--green-d:#1f6a2a;--purple:#8b6fd1;--orange:#e8923a}
 *{box-sizing:border-box}
 html{background:var(--felt-d)}
@@ -115,3 +115,7 @@ select{font:inherit;font-size:18px;padding:8px;border-radius:8px;border:3px soli
 .rbtn.rname{left:50%;top:50%}
 .rbtn:hover:not(:disabled){transform:translate(-50%,-50%) scale(1.1)}
 .rbtn:active:not(:disabled){transform:translate(-50%,-50%) scale(.94);box-shadow:0 1px 0 var(--blue-d)}
+.card img{transform:none;object-fit:contain;filter:drop-shadow(0 3px 2px #0006)}
+.card{border:none;border-radius:12px;overflow:visible}
+.card.sel{box-shadow:none}
+.card.sel img{filter:drop-shadow(0 0 0 #0000) drop-shadow(0 0 6px var(--gold)) drop-shadow(0 0 3px var(--gold))}

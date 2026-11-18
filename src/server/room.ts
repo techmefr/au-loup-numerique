@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '../engine/random.js';
 import { Game, GameError, type Vote } from '../engine/game.js';
 import { BOT_NAMES, chooseMove, chooseVote } from '../engine/bot.js';
 import type { Claim } from '../engine/resolve.js';
@@ -21,8 +21,8 @@ export class Room {
   displays = new Set<Send>();
   sheep: Sheep[] = [];
   hostId = '';
-  voteTimer: NodeJS.Timeout | null = null;
-  botTimers = new Set<NodeJS.Timeout>();
+  voteTimer: ReturnType<typeof setTimeout> | null = null;
+  botTimers = new Set<ReturnType<typeof setTimeout>>();
   voteSeconds = 0;
   botDelay = 1;
 

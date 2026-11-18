@@ -2,15 +2,16 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
+<script>(function(){var m=location.pathname.match(/^(.*?)\/(room|display)\//);var b=m?m[1]+'/':location.pathname.replace(/[^/]*$/,'');document.write('<base href="'+b+'">');})();</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AU LOUP !</title>
-<link rel="stylesheet" href="/style.css">
-<script type="importmap">{"imports":{"three":"/vendor/three/three.module.js"}}</script>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
 </head>
 <body>
 <div id="crt"></div>
 <header class="hud">
-  <img class="logo" src="/assets/logo.png" alt="AU LOUP !" width="217" height="56">
+  <img class="logo" src="assets/logo.png" alt="AU LOUP !" width="217" height="56">
   <div id="chips" class="hud" style="padding:0"></div>
   <div class="opts">
     <button id="rules-open" class="small">Règles illustrées</button>
@@ -26,6 +27,6 @@
 <div id="rules" class="modal" role="dialog" aria-modal="true" aria-label="Règles illustrées" hidden>
   <div class="modal-box"><button id="rules-close" class="red">Fermer</button><div id="rules-body"></div></div>
 </div>
-<script type="module" src="/app.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

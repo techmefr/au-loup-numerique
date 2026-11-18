@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GROUND, paintGround } from '/ground.js';
+import { GROUND, paintGround } from './ground.js';
 
 const TOP = 0;
 const ACTION_MS = { jump: 600, dance: 1200, bleat: 900, sleep: 3500, graze: 2200, run: 1400 };
@@ -152,7 +152,7 @@ export function createMeadow(container, hooks) {
   sign.castShadow = true;
   deco.add(sign, cyl(0.05, 1.5, 0x8e623b, -0.15, 0.75, PEN.z1), cyl(0.05, 1.5, 0x8e623b, 1.15, 0.75, PEN.z1));
 
-  const backTex = new THREE.TextureLoader().load('/assets/cards/back.png');
+  const backTex = new THREE.TextureLoader().load('assets/cards/back.png');
   backTex.colorSpace = THREE.SRGBColorSpace;
 
   const actors = new Map();

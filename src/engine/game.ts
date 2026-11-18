@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from './random.js';
 import { isLie, resolve, type Animal, type Claim, type Resolution } from './resolve.js';
 
 export type Phase = 'lobby' | 'select' | 'voting' | 'result' | 'finished';
