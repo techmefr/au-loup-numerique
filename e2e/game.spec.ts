@@ -19,7 +19,7 @@ test('deux joueurs jouent une manche complète', async ({ browser }) => {
   await host.click('#start');
   await expect(host.getByText('À toi de jouer !')).toBeVisible();
   await expect(guest.getByText('Alice choisit ses cartes…')).toBeVisible();
-  expect(await guest.locator('#hand .card').count()).toBe(5);
+  expect(await guest.locator('#hand .card').count()).toBe(10);
 
   await host.locator('#hand .card').first().click();
   await host.click('#play');
@@ -65,4 +65,31 @@ test('capture d une partie en cours', async ({ browser }) => {
   await b.click('#vt');
   await a.waitForTimeout(2300);
   await a.screenshot({ path: 'test-results/revelation.png' });
+});
+
+test('solo contre l ordinateur : les bots votent et la manche se résout', async ({ browser }) => {
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.fill('#name', 'Alice');
+  await page.click('#solo');
+  await expect(page.getByText('À toi de jouer !')).toBeVisible();
+  expect(await page.locator('#hand .card').count()).toBe(10);
+  await page.locator('#hand .card').first().click();
+  await page.locator('#hand .card').nth(1).click();
+  await page.click('#play');
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: 'test-results/solo-vote.png' });
+  await expect(page.locator('.reveal')).toBeVisible({ timeout: 12000 });
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: 'test-results/solo-rev0.png' });
+  await page.waitForTimeout(900);
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: 'test-results/solo-revelation.png' });
+  await page.waitForTimeout(0);
+  await page.waitForTimeout(5500);
+  await page.screenshot({ path: 'test-results/solo-fin.png' });
+  await page.locator('#scene canvas').click({ position: { x: 640, y: 200 } });
+  expect(errors).toEqual([]);
 });

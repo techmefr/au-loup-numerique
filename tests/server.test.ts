@@ -44,7 +44,7 @@ describe('server', () => {
     const [a, b] = cs as [Client, Client];
     const sa = await a.snap((s) => s.phase === 'select');
     const sb = await b.snap((s) => s.phase === 'select');
-    expect(sa.hand).toHaveLength(5);
+    expect(sa.hand).toHaveLength(10);
     expect(JSON.stringify(sa)).not.toContain(sb.hand[0].id);
     expect(sa.players.every((p: any) => p.hand === undefined)).toBe(true);
 
@@ -74,7 +74,7 @@ describe('server', () => {
     back.send({ type: 'room:join', code, displayName: 'x', resumeToken: joined.resumeToken });
     const r = await back.snap((x) => x.phase === 'select');
     expect(r.you).toBe(s.you);
-    expect(r.hand).toHaveLength(5);
+    expect(r.hand).toHaveLength(10);
     cs.forEach((c) => c.ws.close());
     back.ws.close();
   });

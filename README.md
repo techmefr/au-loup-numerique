@@ -77,8 +77,8 @@ Un joueur crée la salle, les autres ouvrent `/room/CODE`. Écran partagé lectu
 ## État du MVP (valeurs de démo, à valider par l auteur)
 
 - Serveur autoritaire (`src/engine`, `src/server`), snapshots par joueur, aucune main adverse envoyée.
-- Variante d annonce A (« moutons ») ou B (nombre de sauvés) au choix du poseur.
-- **Règle de vote à valider** : démasqué si au moins la moitié des votes exprimés disent AU LOUP. Points : +1 à chaque votant juste, +1 au poseur si le groupe se trompe. Fin après 3 manches par joueur. Timeout de vote 60 s (abstention).
+
+- Règle de pénalité : voir « Règles implémentées » ci-dessous (à valider par l auteur).
 - Prairie en DOM avec 6 actions et renommage (hôte) ; illustrations = emojis provisoires.
 - Pas encore : illustrations définitives, mode hybride de sanctions validé par l auteur.
 
@@ -94,3 +94,18 @@ docker build -t au-loup . && docker run -p 3000:3000 au-loup
 - Une seule instance : les salles sont en mémoire (Redis nécessaire pour en lancer plusieurs).
 - QR code : `/qr/CODE.svg`, généré depuis l'en-tête `Host`.
 - Révélation : les cartes se retournent, le chien chasse le loup ; « Mouvements réduits » remplace l'animation par un affichage direct.
+
+## Règles implémentées (version actuelle)
+
+Cartes : 36 moutons, 16 loups déguisés, 8 chiens déguisés, dos identiques. Chaque joueur reçoit 10 cartes (moins à 7-8 joueurs).
+
+1. À son tour, le joueur pose 1 à 3 cartes face cachée **devant la clôture de l'enclos**.
+2. Mode **Ni vu ni mouton** : il annonce « Ce sont des moutons ». Mode **Compte tes moutons !** : il annonce combien de moutons vont rentrer (0 à 3).
+3. Tous les autres joueurs répondent en secret : **Je valide** (le portail s'ouvre) ou **AU LOUP !** (le portail reste fermé).
+4. Personne ne crie : le portail s'ouvre, les moutons sauvés entrent dans l'enclos (un chien annule un loup, un loup restant mange un mouton) et les cartes quittent la main du poseur.
+5. Au moins un AU LOUP ! : les cartes sont révélées. Si le poseur a menti (loup présent, ou nombre faux), **il reprend toutes les cartes**. Sinon c'est **le premier accusateur qui les prend**.
+6. Le premier joueur qui n'a plus de cartes après une pose validée gagne.
+
+Adversaires ordinateur : « Jouer contre l'ordinateur » crée une salle avec 1 à 7 joueurs contrôlés par le serveur (bluff 35 %, vote selon la taille de la pile et les cartes restantes au poseur).
+
+Pas encore implémentés : modes 3 à 6 du fascicule (consultables dans « Règles illustrées »), qui restent à valider avec l'auteur. Les visuels (cartes, logo, pages de règles) sont issus des images fournies par l'auteur (`web/assets`), le décor 3D est en voxels générés dans le code.

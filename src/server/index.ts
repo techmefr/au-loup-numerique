@@ -11,14 +11,14 @@ import { Room, SHEEP_ACTIONS } from './room.js';
 
 const WEB = fileURLToPath(new URL('../../web', import.meta.url));
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
-const MIME: Record<string, string> = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
+const MIME: Record<string, string> = { '.woff2': 'font/woff2', '.png': 'image/png', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 
 export const rooms = new Map<string, Room>();
 
 const claim = z.union([z.object({ kind: z.literal('all-sheep') }), z.object({ kind: z.literal('survivors'), count: z.number().int().min(0).max(3) })]);
 
 const message = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('room:create'), displayName: z.string().max(16), voteSeconds: z.number().int().min(0).max(120).optional() }),
+  z.object({ type: z.literal('room:create'), displayName: z.string().max(16), voteSeconds: z.number().int().min(0).max(120).optional(), mode: z.enum(['ni-vu', 'compte']).optional(), bots: z.number().int().min(0).max(7).optional(), solo: z.boolean().optional() }),
   z.object({ type: z.literal('room:join'), code: z.string().max(8), displayName: z.string().max(16), resumeToken: z.string().optional() }),
   z.object({ type: z.literal('display:attach'), code: z.string().max(8) }),
   z.object({ type: z.literal('game:start') }),
@@ -85,10 +85,14 @@ export function createApp(port: number) {
           case 'room:create': {
             room = new Room(newCode());
             room.voteSeconds = m.voteSeconds ?? 0;
+            room.game.mode = m.mode ?? 'ni-vu';
             rooms.set(room.code, room);
             const j = room.join(m.displayName, send);
             playerId = j.id;
             send({ type: 'room:joined', code: room.code, playerId, resumeToken: j.token });
+            room.addBots(m.bots ?? 0);
+            if (m.solo) room.start(playerId);
+            else room.broadcast();
             break;
           }
           case 'room:join': {

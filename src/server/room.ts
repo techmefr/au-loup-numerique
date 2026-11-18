@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Game, GameError, type Vote } from '../engine/game.js';
+import { BOT_NAMES, chooseMove, chooseVote } from '../engine/bot.js';
 import type { Claim } from '../engine/resolve.js';
 
 export const SHEEP_ACTIONS = ['jump', 'graze', 'sleep', 'bleat', 'run', 'dance'] as const;
@@ -11,6 +12,8 @@ export type Send = (msg: unknown) => void;
 interface Member { id: string; token: string; send: Send | null; lastAction: number }
 
 const COOLDOWN_MS = 800;
+const INITIAL_FLOCK = 3;
+const rand = (min: number, max: number) => min + Math.random() * (max - min);
 
 export class Room {
   game = new Game();
@@ -19,9 +22,17 @@ export class Room {
   sheep: Sheep[] = [];
   hostId = '';
   voteTimer: NodeJS.Timeout | null = null;
+  botTimers = new Set<NodeJS.Timeout>();
   voteSeconds = 0;
+  botDelay = 1;
 
   constructor(public code: string) {}
+
+  addBots(count: number): void {
+    for (let i = 0; i < Math.min(count, 7); i++) {
+      this.game.addPlayer(`bot-${randomUUID()}`, BOT_NAMES[i % BOT_NAMES.length]!, true);
+    }
+  }
 
   join(name: string, send: Send, resumeToken?: string): { id: string; token: string } {
     const existing = resumeToken ? [...this.members.values()].find((m) => m.token === resumeToken) : undefined;
@@ -56,7 +67,7 @@ export class Room {
   start(id: string): void {
     if (id !== this.hostId) throw new GameError('host_only');
     this.game.start();
-    this.sheep = Array.from({ length: this.game.players.length * 2 }, () => ({ id: randomUUID() }));
+    this.sheep = Array.from({ length: INITIAL_FLOCK }, () => ({ id: randomUUID() }));
     this.armTimer();
     this.broadcast();
   }
@@ -75,29 +86,19 @@ export class Room {
   private afterVote(revealed: boolean): void {
     if (!revealed) return this.broadcast();
     this.clearTimer();
-    this.applyMeadow();
+    const r = this.game.lastReveal!;
+    if (r.outcome === 'entered') {
+      for (let i = 0; i < r.resolution.sheepSaved; i++) this.sheep.push({ id: randomUUID() });
+    }
+    this.emit({ type: 'round:revealed', reveal: r });
     this.broadcast();
-    this.emit({ type: 'round:revealed', reveal: this.game.lastReveal });
   }
 
   next(id: string): void {
     if (id !== this.hostId) throw new GameError('host_only');
     this.game.next();
+    this.armTimer();
     this.broadcast();
-  }
-
-  private applyMeadow(): void {
-    const r = this.game.lastReveal;
-    if (!r) return;
-    for (let i = 0; i < r.resolution.sheepEaten && this.sheep.length > 0; i++) {
-      const gone = this.sheep.pop()!;
-      this.emit({ type: 'meadow:sheep_removed', sheepId: gone.id });
-    }
-    for (let i = 0; i < r.resolution.sheepSaved; i++) {
-      const s = { id: randomUUID() };
-      this.sheep.push(s);
-      this.emit({ type: 'meadow:sheep_added', sheepId: s.id });
-    }
   }
 
   sheepAction(id: string, sheepId: string, action: SheepAction): void {
@@ -131,6 +132,36 @@ export class Room {
     this.voteTimer = null;
   }
 
+  private later(ms: number, fn: () => void): void {
+    const t = setTimeout(() => {
+      this.botTimers.delete(t);
+      try { fn(); } catch { /* état déjà passé */ }
+    }, ms * this.botDelay);
+    this.botTimers.add(t);
+  }
+
+  private runBots(): void {
+    const g = this.game;
+    for (const t of this.botTimers) clearTimeout(t);
+    this.botTimers.clear();
+    if (g.phase === 'select' && g.author.bot) {
+      const roundId = g.roundId;
+      this.later(rand(1400, 2400), () => {
+        if (g.roundId !== roundId || g.phase !== 'select') return;
+        const move = chooseMove(g.author.hand, g.mode);
+        this.submit(g.author.id, move.cardIds, move.claim);
+      });
+    } else if (g.phase === 'voting') {
+      const roundId = g.roundId;
+      for (const bot of g.eligibleVoters().filter((p) => p.bot && !g.votes.has(p.id))) {
+        this.later(rand(1500, 3500), () => {
+          if (g.roundId !== roundId || g.phase !== 'voting' || g.votes.has(bot.id)) return;
+          this.vote(bot.id, chooseVote(g.pile.length, g.author.hand.length));
+        });
+      }
+    }
+  }
+
   private emit(msg: unknown): void {
     for (const m of this.members.values()) m.send?.(msg);
     for (const d of this.displays) d(msg);
@@ -145,17 +176,16 @@ export class Room {
       hostId: this.hostId,
       phase: g.phase,
       roundNo: g.roundNo,
-      totalRounds: g.totalRounds,
       roundId: g.roundId,
       authorId: g.phase === 'lobby' ? null : g.author.id,
-      pile: g.pile.length,
+      pile: g.phase === 'voting' ? g.pile.length : 0,
       claim: g.phase === 'voting' ? g.claim : null,
-      deck: g.deck.length,
       sheepSaved: g.sheepSaved,
-      sheepEaten: g.sheepEaten,
+      winnerId: g.winnerId,
+      mode: g.mode,
       voted: g.votes.size,
       voters: g.phase === 'lobby' ? 0 : g.eligibleVoters().length,
-      players: g.players.map((p) => ({ id: p.id, name: p.name, cards: p.hand.length, score: p.score, connected: p.connected })),
+      players: g.players.map((p) => ({ id: p.id, name: p.name, cards: p.hand.length, score: p.score, connected: p.connected, bot: p.bot })),
       sheep: this.sheep,
       reveal,
     };
@@ -163,17 +193,13 @@ export class Room {
 
   snapshotFor(id: string): Record<string, unknown> {
     const p = this.game.player(id);
-    return {
-      ...this.publicSnapshot(),
-      you: id,
-      hand: p.hand,
-      myVote: this.game.votes.get(id) ?? null,
-    };
+    return { ...this.publicSnapshot(), you: id, hand: p.hand, myVote: this.game.votes.get(id) ?? null };
   }
 
   broadcast(): void {
     for (const m of this.members.values()) m.send?.(this.snapshotFor(m.id));
     const pub = this.publicSnapshot();
     for (const d of this.displays) d(pub);
+    this.runBots();
   }
 }

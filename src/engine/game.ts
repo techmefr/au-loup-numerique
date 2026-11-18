@@ -3,17 +3,18 @@ import { isLie, resolve, type Animal, type Claim, type Resolution } from './reso
 
 export type Phase = 'lobby' | 'select' | 'voting' | 'result' | 'finished';
 export type Vote = 'wolf' | 'trust';
+export type Mode = 'ni-vu' | 'compte';
+export type Outcome = 'entered' | 'author_took' | 'accuser_took';
 
 export interface Card { id: string; type: Animal }
-export interface Player { id: string; name: string; hand: Card[]; score: number; connected: boolean }
+export interface Player { id: string; name: string; hand: Card[]; score: number; connected: boolean; bot: boolean }
 
 export interface GameConfig {
   handSize: number;
-  rounds: number;
   maxPlayers: number;
 }
 
-export const DEFAULT_CONFIG: GameConfig = { handSize: 5, rounds: 0, maxPlayers: 8 };
+export const DEFAULT_CONFIG: GameConfig = { handSize: 10, maxPlayers: 8 };
 
 export interface Reveal {
   roundId: string;
@@ -23,7 +24,9 @@ export interface Reveal {
   votes: Record<string, Vote | 'abstain'>;
   resolution: Resolution;
   lie: boolean;
-  caught: boolean;
+  outcome: Outcome;
+  accuserId: string | null;
+  takerId: string | null;
 }
 
 export class GameError extends Error {}
@@ -49,7 +52,6 @@ export function buildDeck(): Card[] {
 export class Game {
   phase: Phase = 'lobby';
   players: Player[] = [];
-  deck: Card[] = [];
   pile: Card[] = [];
   authorIndex = 0;
   roundNo = 0;
@@ -58,15 +60,15 @@ export class Game {
   votes = new Map<string, Vote>();
   lastReveal: Reveal | null = null;
   sheepSaved = 0;
-  sheepEaten = 0;
-  totalRounds = 0;
+  mode: Mode = 'ni-vu';
+  winnerId: string | null = null;
 
   constructor(public config: GameConfig = DEFAULT_CONFIG) {}
 
-  addPlayer(id: string, name: string): Player {
-    if (this.phase !== 'lobby') throw new GameError('game_started');
+  addPlayer(id: string, name: string, bot = false): Player {
+    if (this.phase !== 'lobby' && this.phase !== 'finished') throw new GameError('game_started');
     if (this.players.length >= this.config.maxPlayers) throw new GameError('room_full');
-    const player: Player = { id, name, hand: [], score: 0, connected: true };
+    const player: Player = { id, name, hand: [], score: 0, connected: true, bot };
     this.players.push(player);
     return player;
   }
@@ -84,26 +86,18 @@ export class Game {
   start(): void {
     if (this.phase !== 'lobby' && this.phase !== 'finished') throw new GameError('bad_phase');
     if (this.players.length < 2) throw new GameError('not_enough_players');
-    this.deck = buildDeck();
-    this.pile = [];
+    const deck = buildDeck();
+    const size = Math.min(this.config.handSize, Math.floor(deck.length / this.players.length));
     this.roundNo = 0;
     this.sheepSaved = 0;
-    this.sheepEaten = 0;
     this.lastReveal = null;
-    this.totalRounds = this.config.rounds || this.players.length * 3;
+    this.winnerId = null;
     for (const p of this.players) {
       p.score = 0;
-      p.hand = [];
+      p.hand = deck.splice(0, size);
     }
-    this.refill();
     this.authorIndex = 0;
     this.beginRound();
-  }
-
-  private refill(): void {
-    for (const p of this.players) {
-      while (p.hand.length < this.config.handSize && this.deck.length > 0) p.hand.push(this.deck.pop()!);
-    }
   }
 
   private beginRound(): void {
@@ -119,6 +113,7 @@ export class Game {
     if (this.author.id !== playerId) throw new GameError('not_your_turn');
     const unique = new Set(cardIds);
     if (unique.size !== cardIds.length || cardIds.length < 1 || cardIds.length > 3) throw new GameError('bad_selection');
+    if ((this.mode === 'ni-vu') !== (claim.kind === 'all-sheep')) throw new GameError('bad_claim');
     if (claim.kind === 'survivors' && (claim.count < 0 || claim.count > 3 || !Number.isInteger(claim.count))) {
       throw new GameError('bad_claim');
     }
@@ -154,32 +149,31 @@ export class Game {
     const cards = this.pile.map((c) => c.type);
     const resolution = resolve(cards);
     const lie = isLie(cards, this.claim);
-    const voters = this.eligibleVoters();
-    const accusers = voters.filter((p) => this.votes.get(p.id) === 'wolf').length;
-    const casting = [...this.votes.values()].length;
-    const caught = casting > 0 && accusers * 2 >= casting;
+    const accuserId = [...this.votes.entries()].find(([, v]) => v === 'wolf')?.[0] ?? null;
     const record: Reveal['votes'] = {};
-    for (const p of voters) record[p.id] = this.votes.get(p.id) ?? 'abstain';
-    for (const p of voters) {
-      const v = this.votes.get(p.id);
-      if (!v) continue;
-      if ((v === 'wolf') === lie) p.score += 1;
+    for (const p of this.eligibleVoters()) record[p.id] = this.votes.get(p.id) ?? 'abstain';
+
+    let outcome: Outcome = 'entered';
+    let takerId: string | null = null;
+    if (accuserId) {
+      outcome = lie ? 'author_took' : 'accuser_took';
+      takerId = lie ? this.author.id : accuserId;
+      this.player(takerId).hand.push(...this.pile);
+    } else {
+      this.sheepSaved += resolution.sheepSaved;
+      this.author.score += resolution.sheepSaved;
+      if (this.author.hand.length === 0) this.winnerId = this.author.id;
     }
-    if (lie !== caught) this.author.score += 1;
-    this.sheepSaved += resolution.sheepSaved;
-    this.sheepEaten += resolution.sheepEaten;
-    this.lastReveal = { roundId: this.roundId, authorId: this.author.id, cards, claim: this.claim, votes: record, resolution, lie, caught };
+    this.lastReveal = { roundId: this.roundId, authorId: this.author.id, cards, claim: this.claim, votes: record, resolution, lie, outcome, accuserId, takerId };
     this.phase = 'result';
   }
 
   next(): void {
     if (this.phase !== 'result') throw new GameError('bad_phase');
-    const handsEmpty = this.players.some((p) => p.hand.length === 0 && this.deck.length === 0);
-    if (this.roundNo >= this.totalRounds || handsEmpty) {
+    if (this.winnerId) {
       this.phase = 'finished';
       return;
     }
-    this.refill();
     this.authorIndex = (this.authorIndex + 1) % this.players.length;
     this.beginRound();
   }
