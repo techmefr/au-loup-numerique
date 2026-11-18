@@ -10,7 +10,7 @@ const rng = (seed) => () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483
 
 export const riverPoints = [[-8.2, -8.5], [-7.2, -5.2], [-7.9, -2.4], [-6.9, 0.6], [-7.8, 3.6], [-8.4, 6.2], [-8.0, 8.6]];
 export const pathPoints = [[2.2, 8.6], [1.6, 5.2], [0.5, 2.4], [0.5, 1.0]];
-export const pathBack = [[4.9, -1.0], [5.6, -4.2], [5.0, -6.2], [5.6, -8.6]];
+export const pathBack = [[7.4, -1.0], [8.0, -4.2], [7.6, -6.2], [8.0, -8.6]];
 
 function curve(ctx, pts) {
   ctx.beginPath();
@@ -80,12 +80,12 @@ export function paintGround() {
 
   ctx.fillStyle = '#b9e07f';
   ctx.beginPath();
-  ctx.roundRect(cx(-3.4), cz(-6.4), 7.8 * GROUND.px, 7.9 * GROUND.px, 70);
+  ctx.roundRect(cx(-5.4), cz(-7.6), 11.8 * GROUND.px, 9.1 * GROUND.px, 70);
   ctx.fill();
   for (let i = 0; i < 26; i++) {
     ctx.fillStyle = i % 3 ? '#a9d56c' : '#d9c777';
     ctx.beginPath();
-    ctx.ellipse(cx(-3 + rand() * 7), cz(-6 + rand() * 7), 30 + rand() * 40, 18 + rand() * 24, rand() * 3, 0, 7);
+    ctx.ellipse(cx(-5 + rand() * 11), cz(-7 + rand() * 8), 30 + rand() * 40, 18 + rand() * 24, rand() * 3, 0, 7);
     ctx.fill();
   }
 

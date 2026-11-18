@@ -12,7 +12,7 @@ export type Send = (msg: unknown) => void;
 interface Member { id: string; token: string; send: Send | null; lastAction: number }
 
 const COOLDOWN_MS = 800;
-const INITIAL_FLOCK = 3;
+const INITIAL_FLOCK = 6;
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
 
 export class Room {

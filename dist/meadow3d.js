@@ -3,7 +3,7 @@ import { GROUND, paintGround } from './ground.js';
 
 const TOP = 0;
 const ACTION_MS = { jump: 600, dance: 1200, bleat: 900, sleep: 3500, graze: 2200, run: 1400 };
-const PEN = { x0: -3, x1: 4, z0: -6, z1: 1 };
+const PEN = { x0: -5, x1: 6, z0: -7.2, z1: 1 };
 const GATE = { x0: -0.5, x1: 1.5 };
 const DEPOSIT = new THREE.Vector3(0.5, TOP, 3.6);
 

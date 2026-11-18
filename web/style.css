@@ -170,4 +170,4 @@ body.home .mode b{display:block}
 body.home .row{margin:8px 0}
 body.home #name,body.home input[type=text]{width:100%;box-sizing:border-box}
 
-@media (min-width:900px){body.home #app{justify-content:flex-start;padding-left:4vw}}
+@media (min-width:900px){body.home #app{align-items:flex-start;justify-content:center;padding-left:3vw}}

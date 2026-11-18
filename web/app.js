@@ -37,7 +37,7 @@ const meadow = createMeadow($('#scene'), {
   onPick: (id) => (id ? openRadial(id) : closeRadial()),
   onAction: (id, action) => { if (action === 'bleat') { toast('Bêêê !', 1000); beep(330); } },
 });
-if (!displayCode) meadow.setSheep(Array.from({ length: 4 }, (_, i) => ({ id: `demo-${i}` })));
+if (!displayCode) meadow.setSheep(Array.from({ length: 6 }, (_, i) => ({ id: `demo-${i}` })));
 
 window.loup = { meadow };
 let radialId = null;
@@ -97,7 +97,7 @@ ws.onmessage = (e) => {
     const changed = !snap || snap.phase !== m.phase || snap.roundId !== m.roundId;
     snap = m; err = '';
     if (changed) selected.clear();
-    meadow.setSheep(m.sheep);
+    meadow.setSheep(m.sheep.length || m.phase !== 'lobby' ? m.sheep : Array.from({ length: 6 }, (_, i) => ({ id: `demo-${i}` })));
     meadow.setDeposit(m.phase === 'voting' ? m.pile : 0);
     render();
     maybeAutoNext();
@@ -168,7 +168,7 @@ function render() {
   hud();
   document.body.classList.toggle('home', !displayCode && (!snap || snap.phase === 'lobby'));
   if (!snap) document.body.classList.remove('ingame');
-  meadow.setPanX(!displayCode && (!snap || snap.phase === 'lobby') && innerWidth > 900 ? -4 : 0);
+  meadow.setPanX(!displayCode && (!snap || snap.phase === 'lobby') && innerWidth > 900 ? -3 : 0);
   if (!snap) {
     if (displayCode) { app.innerHTML = '<div class="panel">Connexion à la salle…</div>'; return; }
     const s = saved();
