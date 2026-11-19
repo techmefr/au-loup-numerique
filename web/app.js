@@ -88,6 +88,7 @@ const parts = url.pathname.split('/').filter(Boolean);
 const displayCode = parts[0] === 'display' ? parts[1] : null;
 let roomCode = parts[0] === 'room' ? parts[1] : null;
 let announcement = '', placementTarget = '';
+let lastResultMotion = '';
 let snap = null, selected = new Set(), claimCount = 1, err = '', prefMode = 'ni-vu';
 
 if (displayCode) $('#scene').classList.add('big');
@@ -343,7 +344,7 @@ function outcomeText(r, g) {
 }
 
 function faceUpCards(cards) {
-  return cards.length ? `<div class="reveal-row">${cards.map((type) => cardHtml({ type }, '', 'disabled')).join('')}</div>` : '';
+  return cards.length ? `<div class="reveal-row">${cards.map((type, i) => cardHtml({ type }, '', `disabled style="--i:${Math.min(i, 5)}"`)).join('')}</div>` : '';
 }
 
 function variantPanel(g, isAuthor, isHost) {
@@ -375,7 +376,7 @@ function variantPanel(g, isAuthor, isHost) {
     const roles = Object.entries(variant.roles).map(([id, camp]) => `${pName(id)} · ${campName(camp)}`).join(' / ');
     const buttons = isHost ? `<div class="row"><button class="gold" id="${finished ? 'again' : 'next'}">${finished ? 'Rejouer' : isRisk ? 'Joueur suivant' : 'Manche suivante'}</button>
       </div>` : '';
-    return `<section class="panel"><h2>${finished ? 'Fin de partie' : 'Résultat'}</h2>${role}${progress}<p>${summary}</p>
+    return `<section class="panel result-panel"><h2>${finished ? 'Fin de partie' : 'Résultat'}</h2>${role}${progress}<p>${summary}</p>
       ${victory ? `<p class="verdict good">${victory}</p>` : ''}${roles ? `<p class="small">${roles}</p>` : ''}
       ${faceUpCards(result.cards)}${flocks}${announcements}${buttons}</section>`;
   }
@@ -400,6 +401,58 @@ function variantPanel(g, isAuthor, isHost) {
     ${isAuthor ? `${claim}<div class="row">${target}<button class="gold" id="variant-play" ${selected.size ? '' : 'disabled'}>${isPass ? 'Passer la carte' : 'Poser'}</button></div>` : ''}</section>`;
 }
 
+function resultMood(game) {
+  const { variant, reveal, winnerId, you } = game;
+  if (winnerId) return !you || winnerId === you ? 'victory' : 'setback';
+  if (reveal) {
+    if (reveal.takerId) return !you || reveal.takerId === you ? 'setback' : 'success';
+    return reveal.resolution.sheepSaved ? 'success' : 'setback';
+  }
+  const result = variant?.result;
+  if (!result) return null;
+  if (result.winningCamp) return !you || game.role === result.winningCamp ? 'victory' : 'setback';
+  if (result.winners?.length) return !you || result.winners.includes(you) ? 'victory' : 'setback';
+  if (result.loserId) return !you || result.loserId === you ? 'setback' : 'success';
+  if (game.mode === 'loup-parmi-nous') {
+    if (game.phase === 'finished' || result.saved === result.eaten) return 'neutral';
+    const campAhead = result.saved > result.eaten ? 'sheep' : 'wolf';
+    return !game.role || game.role === campAhead ? 'success' : 'setback';
+  }
+  return result.saved ? 'success' : 'setback';
+}
+
+function showResultMotion(game) {
+  const panel = app.querySelector('.result-panel');
+  if (!panel) return;
+  const mood = resultMood(game);
+  if (!mood) return;
+  panel.dataset.mood = mood;
+  const key = game.code + ':' + game.roundId;
+  if (lastResultMotion === key) return;
+  lastResultMotion = key;
+  if (document.body.classList.contains('calm') || mood === 'neutral') return;
+  panel.classList.add('result-enter');
+  if (mood === 'setback') return;
+  const confetti = document.createElement('div');
+  confetti.className = 'result-particles';
+  confetti.setAttribute('aria-hidden', 'true');
+  const colors = ['#f4c85e', '#fff0c4', '#92b76c', '#e29b61', '#f7a69d'];
+  const count = mood === 'victory' ? 36 : 12;
+  for (let i = 0; i < count; i++) {
+    const piece = document.createElement('i');
+    const angle = (i / count) * 2 * Math.PI;
+    const distance = 36 + Math.random() * (mood === 'victory' ? 116 : 50);
+    piece.style.setProperty('--dx', Math.cos(angle) * distance + 'px');
+    piece.style.setProperty('--dy', Math.sin(angle) * distance - 38 + 'px');
+    piece.style.setProperty('--spin', (Math.random() - 0.5) * 500 + 'deg');
+    piece.style.setProperty('--delay', (i % 6) * 22 + 'ms');
+    piece.style.backgroundColor = colors[i % colors.length];
+    confetti.append(piece);
+  }
+  panel.append(confetti);
+  setTimeout(() => confetti.remove(), 1150);
+}
+
 function render() {
   hud();
   $('#mode-home').hidden = !LOCAL || !snap;
@@ -408,15 +461,15 @@ function render() {
   if (!snap) {
     if (displayCode) { app.innerHTML = '<div class="panel">Connexion à la salle…</div>'; return; }
     const s = saved();
-    app.innerHTML = `<div class="panel"><h2>Bienvenue dans la prairie</h2>
+    app.innerHTML = `<div class="panel setup-panel"><h2>Bienvenue dans la prairie</h2>
       <p>Choisis un des six modes du jeu.</p>
       <label class="f">Ton prénom<input type="text" id="name" maxlength="16" value="${escapeHtml(s.name)}"></label>
       <fieldset class="modes"><legend>Mode de jeu</legend>
         ${Object.entries(MODES).map(([key, [title, description, min, max]]) => `<label class="mode"><input type="radio" name="mode" value="${key}" ${prefMode === key ? 'checked' : ''}><b>${title}</b><span>${min} à ${max} joueurs · ${description}</span></label>`).join('')}
       </fieldset>
-      <div class="row"><button id="rules-home">Voir les règles</button></div>
       <div class="row"><button id="solo" class="gold">Jouer contre l'ordinateur</button>
         <label class="inline">Adversaires <select id="bots"></select></label></div>
+      <div class="row"><button id="rules-home">Voir les règles</button></div>
       ${LOCAL ? '<p class="small">Version en ligne : tu joues contre les ordinateurs, directement dans ton navigateur. Le multijoueur entre amis demande le serveur (voir le README).</p>' : `<div class="row"><button id="create">Créer une partie entre amis</button></div>
       <label class="f">Code de la salle<input type="text" id="code" maxlength="4" value="${escapeHtml(roomCode)}" style="text-transform:uppercase"></label>
       <div class="row"><button id="join" class="green">Rejoindre une partie</button></div>`}
@@ -442,7 +495,7 @@ function render() {
   let body = '';
   if (g.phase === 'lobby') {
     const link = `${location.origin}/room/${g.code}`;
-    body = `<div class="panel"><h2>Salle ${g.code}</h2><div class="row">${LOCAL ? '' : `<img class="qr" src="qr/${g.code}.svg" alt="QR code pour rejoindre la salle ${g.code}" width="150" height="150">`}<div><div class="codebox" aria-hidden="true">${g.code}</div><p>Mode : ${MODES[g.mode][0]}</p><p>Lien : <a href="${link}">${link}</a></p><p>Écran partagé : <a href="/display/${g.code}" target="_blank">/display/${g.code}</a></p></div></div>
+    body = `<div class="panel lobby-panel"><h2>Salle ${g.code}</h2><div class="row">${LOCAL ? '' : `<img class="qr" src="qr/${g.code}.svg" alt="QR code pour rejoindre la salle ${g.code}" width="150" height="150">`}<div><div class="codebox" aria-hidden="true">${g.code}</div><p>Mode : ${MODES[g.mode][0]}</p><p>Lien : <a href="${link}">${link}</a></p><p>Écran partagé : <a href="/display/${g.code}" target="_blank">/display/${g.code}</a></p></div></div>
       ${isHost ? `<button id="start" class="gold" ${g.players.length < g.minPlayers ? 'disabled' : ''}>Lancer la partie (${g.players.length} joueurs)</button>` : '<p>En attente de l’hôte…</p>'}</div>`;
   } else if (g.variant) {
     body = variantPanel(g, isAuthor && !displayCode, isHost && !displayCode);
@@ -451,13 +504,13 @@ function render() {
       ? `<div class="row center"><label>Moutons qui rentreront : <input type="text" id="cc" inputmode="numeric" value="${claimCount}" style="width:70px" aria-label="Nombre de moutons annoncé"></label></div>`
       : `<p class="center-text"><span class="claim">« Ce sont des moutons ! »</span></p>`;
     body = isAuthor
-      ? `<div class="panel"><h2>À toi de jouer !</h2><p>Choisis 1 à 3 cartes à poser devant l'enclos.</p><div class="hand" id="hand">${handCards(g.hand, true)}</div>${claimUi}
-        <div class="row center"><button id="play" ${selected.size < 1 ? 'disabled' : ''}>Envoyer ${selected.size ? '(' + selected.size + ')' : ''}</button></div></div>`
-      : `<div class="panel"><h2>${pName(g.authorId)} choisit ses cartes…</h2><div class="hand" id="hand">${handCards(g.hand, false)}</div></div>`;
+      ? `<div class="panel hand-panel"><h2>À toi de jouer !</h2><p>Choisis 1 à 3 cartes à poser devant l'enclos.</p><div class="hand" id="hand">${handCards(g.hand, true)}</div>${claimUi}
+        <div class="row center"><button id="play" class="gold" ${selected.size < 1 ? 'disabled' : ''}>Envoyer ${selected.size ? '(' + selected.size + ')' : ''}</button></div></div>`
+      : `<div class="panel hand-panel"><h2>${pName(g.authorId)} choisit ses cartes…</h2><div class="hand" id="hand">${handCards(g.hand, false)}</div></div>`;
   } else if (g.phase === 'voting') {
     const claim = g.claim.kind === 'all-sheep' ? 'Ce sont des moutons !' : `${g.claim.count} mouton(s) vont rentrer !`;
     const backs = Array.from({ length: g.pile }, (_, i) => `<div class="card back" style="--r:${(i - (g.pile - 1) / 2) * 8}deg" aria-hidden="true"><img src="assets/cards/back.png" alt="" draggable="false"></div>`).join('');
-    body = `<div class="panel"><h2>${pName(g.authorId)} pose ${g.pile} carte(s) devant l'enclos</h2><p><span class="claim">« ${claim} »</span></p>
+    body = `<div class="panel vote-panel"><h2>${pName(g.authorId)} pose ${g.pile} carte(s) devant l'enclos</h2><p><span class="claim">« ${claim} »</span></p>
       <div class="pile" id="pile">${backs}</div>
       <p>Réponses : ${g.voted}/${g.voters}</p>`;
     if (!isAuthor && !g.myVote) body += `<p>Glisse la pile à gauche pour crier AU LOUP !, à droite pour laisser entrer — ou utilise les boutons.</p>
@@ -469,8 +522,7 @@ function render() {
   } else {
     const r = g.reveal;
     const win = g.winnerId ? `<div class="verdict good victory">🏆 ${pName(g.winnerId)} n'a plus de cartes : VICTOIRE !</div>` : '';
-    if (g.winnerId) celebrate(g.winnerId + ':' + g.phase);
-    body = `<div class="panel reveal"><div class="verdict ${r.lie ? 'bad' : 'good'}">${r.lie ? 'BLUFF !' : 'HONNÊTE !'}</div>
+    body = `<div class="panel reveal result-panel"><div class="verdict ${r.lie ? 'bad' : 'good'}">${r.lie ? 'BLUFF !' : 'HONNÊTE !'}</div>
       <div class="reveal-row">${r.cards.map((t, i) => cardHtml({ type: t }, 'big', `style="--i:${i}" disabled`)).join('')}</div>
       <p class="center-text">${outcomeText(r, g)}</p>
       <p class="center-text small">${Object.entries(r.votes).map(([id, v]) => `${pName(id)} : ${v === 'wolf' ? 'AU LOUP' : v === 'trust' ? 'valide' : 'absent'}`).join(' · ')}</p>
@@ -484,7 +536,7 @@ function render() {
   const stack = !displayCode && (g.phase === 'select' || g.phase === 'voting')
     ? `<div id="stack">Cartes restantes <b>${g.hand.length}</b></div>`
     : '';
-  const controls = displayCode && !g.reveal && !g.variant ? `<h2>Salle ${g.code}</h2>` : body;
+  const controls = displayCode && !g.reveal && !g.variant && !resolving ? `<h2>Salle ${g.code}</h2>` : body;
   const canSwap = !displayCode && g.phase !== 'lobby' && !resolving;
   const returnLabel = g.phase === 'select' ? 'Revenir aux cartes' : g.phase === 'voting' ? 'Revenir au vote' : 'Revenir au résultat';
   const gamePanel = canSwap
@@ -505,6 +557,7 @@ function render() {
     closeRadial(true);
   });
   syncSheepPanel();
+  showResultMotion(g);
   if (displayCode) return;
   $('#start')?.addEventListener('click', () => send({ type: 'game:start' }));
   $('#next')?.addEventListener('click', () => send({ type: 'game:next' }));
@@ -554,25 +607,3 @@ $('#share').onclick = async () => {
   try { if (navigator.share) { await navigator.share(data); return; } } catch { return; }
   try { await navigator.clipboard.writeText(link); toast('Lien copié !'); } catch { prompt('Copie ce lien', link); }
 };
-
-let celebrated = '';
-function celebrate(key) {
-  if (celebrated === key) return;
-  celebrated = key;
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const box = document.createElement('div');
-  box.className = 'confetti';
-  box.setAttribute('aria-hidden', 'true');
-  const colors = ['#f5c542', '#e8503a', '#5cb85c', '#4aa3df', '#fff', '#d97ad9'];
-  for (let i = 0; i < 90; i++) {
-    const p = document.createElement('i');
-    p.style.cssText = `left:${Math.random() * 100}%;background:${colors[i % colors.length]};--dx:${(Math.random() - 0.5) * 220}px;--r:${Math.random() * 900 - 450}deg;animation-delay:${Math.random() * 0.9}s;animation-duration:${2.6 + Math.random() * 1.8}s`;
-    box.appendChild(p);
-  }
-  const sheep = document.createElement('div');
-  sheep.className = 'party';
-  sheep.textContent = '🐑🐑🐑';
-  box.appendChild(sheep);
-  document.body.appendChild(box);
-  setTimeout(() => box.remove(), 5500);
-}

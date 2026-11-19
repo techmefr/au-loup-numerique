@@ -57,6 +57,9 @@ test('les quatre autres modes du livret sont jouables en solo', async ({ page })
   await page.getByRole('button', { name: /^(Loup|Chien) déguisé$/ }).first().click();
   await page.click('#variant-play');
   await expect(page.getByText(/perd la manche avec un loup et un chien/)).toBeVisible();
+  await expect(page.locator('.result-panel')).toHaveAttribute('data-mood', 'success');
+  await expect(page.locator('.result-panel')).not.toHaveClass(/result-enter/);
+  await expect(page.locator('.result-particles')).toHaveCount(0);
 
   await startMode('troupeau-de-tete');
   await expect(page.locator('#bots option').last()).toHaveAttribute('value', '5');

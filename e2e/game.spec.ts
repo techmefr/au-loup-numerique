@@ -33,6 +33,8 @@ test('deux joueurs agrandissent puis vident le troupeau', async ({ browser }) =>
   await expect(host.getByRole('heading', { name: 'Regarde le portail…' })).toBeVisible();
   await expect(host.locator('#chips .gold b')).toHaveText(String(initialFlock));
   await expect(host.locator('.reveal')).toBeVisible({ timeout: 10000 });
+  await expect(host.locator('.result-panel')).toHaveAttribute('data-mood', 'success');
+  await expect(host.locator('.result-panel')).toHaveClass(/result-enter/);
   await expect(guest.locator('.reveal')).toBeVisible({ timeout: 10000 });
   await expect(host.locator('#chips .gold b')).toHaveText(String(initialFlock + 1));
 
@@ -46,6 +48,8 @@ test('deux joueurs agrandissent puis vident le troupeau', async ({ browser }) =>
   await expect(host.locator('.reveal')).toBeVisible({ timeout: 10000 });
   await expect(host.locator('#chips .gold b')).toHaveText('0');
   await expect(guest.locator('#chips .gold b')).toHaveText('0', { timeout: 10000 });
+  const moods = await Promise.all([host, guest].map((page) => page.locator('.result-panel').getAttribute('data-mood')));
+  expect(moods.sort()).toEqual(['setback', 'success']);
   await Promise.all([host.context().close(), guest.context().close()]);
 });
 
