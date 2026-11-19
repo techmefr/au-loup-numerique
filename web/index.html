@@ -26,11 +26,18 @@
       <div class="settings-panel">
         <label><input type="checkbox" id="calm"> Mouvements réduits</label>
         <label><input type="checkbox" id="mute" checked> Sans son</label>
+        <label class="audio-level" for="effects-level">Effets sonores <input id="effects-level" type="range" min="0" max="100" value="62"></label>
+        <label class="audio-level" for="ambience-level">Ambiance de la prairie <input id="ambience-level" type="range" min="0" max="100" value="0"></label>
+        <button id="share-menu" class="small mobile-share">Partager</button>
         <button id="mode-home" class="small" hidden>Changer de mode</button>
       </div>
     </details>
   </div>
 </header>
+<section id="connection" class="panel connection-panel" hidden>
+  <p role="status">Connexion interrompue.</p>
+  <button id="retry" type="button">Réessayer</button>
+</section>
 <section id="scene" class="scene" aria-label="Prairie et enclos">
   <div id="menu"></div>
   <div id="toast" role="status"></div>

@@ -12,7 +12,11 @@ test('version GitHub Pages : solo dans le navigateur, sans serveur de jeu', asyn
   await page.click('#solo');
   await expect(page.getByText('À toi de jouer !')).toBeVisible();
   expect(await page.locator('#hand .card').count()).toBe(10);
-  await page.locator('#hand .card').first().click();
+  const card = page.locator('#hand .card').first();
+  await card.focus();
+  await card.press('Space');
+  await expect(card).toBeFocused();
+  await expect(card).toHaveAttribute('aria-pressed', 'true');
   await page.click('#play');
   await expect(page.locator('.reveal')).toBeVisible({ timeout: 15000 });
   await page.screenshot({ path: 'test-results/pages.png' });
@@ -21,7 +25,7 @@ test('version GitHub Pages : solo dans le navigateur, sans serveur de jeu', asyn
 });
 
 test('splash, choix du mode expliqué, bouton partager', async ({ page }) => {
-  await page.goto('http://localhost:4173/au-loup-numerique/?splash=1');
+  await page.goto('http://localhost:4173/au-loup-numerique/?local=1&splash=1');
   await expect(page.locator('#splash')).toBeVisible();
   await page.click('#splash-play');
   await expect(page.locator('#splash')).toBeHidden();
@@ -116,6 +120,8 @@ test('une partie se joue au toucher sur un écran de 320 px', async ({ browser }
   try {
     const page = await context.newPage();
     await page.goto('http://localhost:4173/au-loup-numerique/?local=1');
+    await expect(page.locator('#splash')).toBeHidden();
+    await expect(page.locator('#solo')).toBeInViewport();
     await page.fill('#name', 'Alice');
     await page.locator('#solo').tap();
 
@@ -151,4 +157,36 @@ test('une partie se joue au toucher sur un écran de 320 px', async ({ browser }
   } finally {
     await context.close();
   }
+});
+
+test('les effets et le ruisseau ont des volumes indépendants et mémorisés', async ({ page }) => {
+  test.setTimeout(60000);
+  await page.addInitScript(() => {
+    const log: boolean[] = [];
+    Object.assign(window, { soundStarts: log });
+    const start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...args) {
+      log.push(this.loop);
+      return start.apply(this, args);
+    };
+  });
+  await page.goto('http://localhost:4173/au-loup-numerique/?local=1');
+  await page.locator('.settings summary').click();
+  const mute = page.getByLabel('Sans son');
+  const effects = page.getByLabel('Effets sonores');
+  const ambience = page.getByLabel('Ambiance de la prairie');
+  await expect(mute).toBeChecked();
+  await effects.fill('38');
+  await ambience.fill('24');
+  expect(await page.evaluate(() => (window as any).soundStarts)).toEqual([]);
+  await mute.uncheck();
+  await expect.poll(() => page.evaluate(() => (window as any).soundStarts)).toContain(true);
+  await page.reload();
+  await page.locator('.settings summary').click();
+  await expect(mute).not.toBeChecked();
+  await expect(effects).toHaveValue('38');
+  await expect(ambience).toHaveValue('24');
+  await page.locator('.settings summary').click();
+  await page.locator('#solo').click();
+  await expect.poll(() => page.evaluate(() => (window as any).soundStarts)).toContain(false);
 });

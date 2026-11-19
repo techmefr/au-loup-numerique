@@ -1,4 +1,5 @@
 import { createMeadow } from './meadow3d.js';
+import { createGameAudio } from './audio.js';
 
 const $ = (s) => document.querySelector(s);
 const app = $('#app');
@@ -171,12 +172,21 @@ const send = (m) => ws.readyState === 1 && ws.send(JSON.stringify(m));
 const saved = () => { try { return JSON.parse(localStorage.getItem('loup') || '{}'); } catch { return {}; } };
 
 ws.onopen = () => {
+  $('#connection').hidden = true;
+  app.inert = false;
   if (displayCode) return send({ type: 'display:attach', code: displayCode });
   const s = saved();
   if (roomCode && s.code === roomCode && s.token) send({ type: 'room:join', code: roomCode, displayName: s.name || 'Mouton', resumeToken: s.token });
   else render();
 };
-ws.onclose = () => toast('Déconnecté — recharge la page', 5000);
+function showDisconnected() {
+  $('#connection').hidden = false;
+  app.inert = true;
+}
+
+$('#retry').onclick = () => location.reload();
+ws.onerror = showDisconnected;
+ws.onclose = showDisconnected;
 ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
   if (m.type === 'room:joined') {
@@ -214,75 +224,13 @@ function onRevealed(r) {
   meadow.stage(r, () => {
     if (resolving !== current) return;
     resolving = null;
-    playSound(r.outcome === 'entered' && !r.resolution.sheepEaten ? 'entered' : 'result');
     render();
   });
 }
 
-const sounds = {
-  card: [{ pitch: 392, end: 370, length: 0.07, volume: 0.025 }],
-  bleat: [
-    { pitch: 315, end: 275, length: 0.12, volume: 0.031 },
-    { pitch: 288, end: 218, length: 0.15, volume: 0.023, delay: 0.13 },
-  ],
-  entered: [
-    { pitch: 392, length: 0.18, volume: 0.032 },
-    { pitch: 494, length: 0.22, volume: 0.03, delay: 0.11 },
-  ],
-  result: [
-    { pitch: 330, length: 0.15, volume: 0.027 },
-    { pitch: 294, length: 0.18, volume: 0.023, delay: 0.1 },
-  ],
-};
-let audio;
-let soundOutput;
-const mute = $('#mute');
-
-async function enableAudio() {
-  if (!audio) {
-    audio = new AudioContext();
-    soundOutput = audio.createGain();
-    soundOutput.connect(audio.destination);
-  }
-  soundOutput.gain.value = mute.checked ? 0 : 1;
-  if (audio.state === 'suspended') await audio.resume();
-}
-
-mute.onchange = () => {
-  if (mute.checked) {
-    if (soundOutput) soundOutput.gain.value = 0;
-  } else {
-    enableAudio().catch(() => {});
-  }
-};
-
-async function playSound(cue) {
-  if (mute.checked) return;
-  try {
-    await enableAudio();
-    if (mute.checked || audio.state !== 'running') return;
-    const now = audio.currentTime;
-    for (const { pitch, end = pitch, length, volume, delay = 0 } of sounds[cue]) {
-      const start = now + delay;
-      const stop = start + length;
-      const oscillator = audio.createOscillator();
-      const envelope = audio.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(pitch, start);
-      oscillator.frequency.exponentialRampToValueAtTime(end, stop);
-      envelope.gain.setValueAtTime(0, start);
-      envelope.gain.linearRampToValueAtTime(volume, start + 0.018);
-      envelope.gain.exponentialRampToValueAtTime(0.001, stop);
-      oscillator.connect(envelope);
-      envelope.connect(soundOutput);
-      oscillator.onended = () => { oscillator.disconnect(); envelope.disconnect(); };
-      oscillator.start(start);
-      oscillator.stop(stop);
-    }
-  } catch {
-    // Audio can be unavailable or blocked by the browser.
-  }
-}
+const playSound = createGameAudio({
+  mute: $('#mute'), effects: $('#effects-level'), ambience: $('#ambience-level'),
+});
 const applyCalm = () => { document.body.classList.toggle('calm', $('#calm').checked); meadow.setCalm($('#calm').checked); };
 $('#calm').onchange = applyCalm;
 if (matchMedia('(prefers-reduced-motion: reduce)').matches) $('#calm').checked = true;
@@ -430,6 +378,7 @@ function showResultMotion(game) {
   const key = game.code + ':' + game.roundId;
   if (lastResultMotion === key) return;
   lastResultMotion = key;
+  if (mood !== 'neutral') playSound(mood);
   if (document.body.classList.contains('calm') || mood === 'neutral') return;
   panel.classList.add('result-enter');
   if (mood === 'setback') return;
@@ -461,16 +410,19 @@ function render() {
   if (!snap) {
     if (displayCode) { app.innerHTML = '<div class="panel">Connexion à la salle…</div>'; return; }
     const s = saved();
-    app.innerHTML = `<div class="panel setup-panel"><h2>Bienvenue dans la prairie</h2>
-      <p>Choisis un des six modes du jeu.</p>
-      <label class="f">Ton prénom<input type="text" id="name" maxlength="16" value="${escapeHtml(s.name)}"></label>
-      <fieldset class="modes"><legend>Mode de jeu</legend>
-        ${Object.entries(MODES).map(([key, [title, description, min, max]]) => `<label class="mode"><input type="radio" name="mode" value="${key}" ${prefMode === key ? 'checked' : ''}><b>${title}</b><span>${min} à ${max} joueurs · ${description}</span></label>`).join('')}
+    app.innerHTML = `<div class="panel setup-panel">
+      <h1>Choisis ton mode</h1>
+      <fieldset class="modes" aria-describedby="mode-description"><legend class="sr">Mode de jeu</legend>
+        ${Object.entries(MODES).map(([key, [title]]) => `<label class="mode"><input type="radio" name="mode" value="${key}" ${prefMode === key ? 'checked' : ''}><b>${title}</b></label>`).join('')}
       </fieldset>
-      <div class="row"><button id="solo" class="gold">Jouer contre l'ordinateur</button>
-        <label class="inline">Adversaires <select id="bots"></select></label></div>
-      <div class="row"><button id="rules-home">Voir les règles</button></div>
-      ${LOCAL ? '<p class="small">Version en ligne : tu joues contre les ordinateurs, directement dans ton navigateur. Le multijoueur entre amis demande le serveur (voir le README).</p>' : `<div class="row"><button id="create">Créer une partie entre amis</button></div>
+      <button id="solo" class="gold">Jouer en solo</button>
+      <p id="mode-description" aria-live="polite" class="mode-description"></p>
+      <div class="setup-fields">
+        <label class="f">Ton prénom<input type="text" id="name" maxlength="16" autocomplete="nickname" placeholder="Mouton" value="${escapeHtml(s.name)}"></label>
+        <label class="f">Adversaires<select id="bots"></select></label>
+      </div>
+      <div class="row setup-secondary"><button id="rules-home">Voir les règles</button></div>
+      ${LOCAL ? '' : `<div class="row"><button id="create">Créer une partie entre amis</button></div>
       <label class="f">Code de la salle<input type="text" id="code" maxlength="4" value="${escapeHtml(roomCode)}" style="text-transform:uppercase"></label>
       <div class="row"><button id="join" class="green">Rejoindre une partie</button></div>`}
       <p class="err" role="alert">${err}</p></div>`;
@@ -479,14 +431,18 @@ function render() {
     const updateBots = () => {
       const bots = $('#bots');
       const previous = Number(bots.value) || 2;
-      const [, , min, max] = MODES[mode()];
+      const [, description, min, max] = MODES[mode()];
+      $('#mode-description').textContent = `${min} à ${max} joueurs · ${description}`;
       bots.replaceChildren(...Array.from({ length: max - min + 1 }, (_, i) => new Option(i + min - 1, i + min - 1)));
       bots.value = String(Math.min(max - 1, Math.max(min - 1, previous)));
     };
     document.querySelectorAll('[name=mode]').forEach((radio) => radio.onchange = updateBots);
     updateBots();
     $('#rules-home').onclick = openRules;
-    $('#solo').onclick = () => send({ type: 'room:create', displayName: name(), voteSeconds: 60, mode: mode(), bots: Number($('#bots').value), solo: true });
+    $('#solo').onclick = () => {
+      playSound('place');
+      send({ type: 'room:create', displayName: name(), voteSeconds: 60, mode: mode(), bots: Number($('#bots').value), solo: true });
+    };
     if (!LOCAL) $('#create').onclick = () => send({ type: 'room:create', displayName: name(), voteSeconds: 60, mode: mode() });
     if (!LOCAL) $('#join').onclick = () => send({ type: 'room:join', code: $('#code').value.trim().toUpperCase(), displayName: name() });
     return;
@@ -500,20 +456,21 @@ function render() {
   } else if (g.variant) {
     body = variantPanel(g, isAuthor && !displayCode, isHost && !displayCode);
   } else if (g.phase === 'select') {
+    const action = selected.size ? `Poser ${selected.size} carte${selected.size === 1 ? '' : 's'}` : 'Poser les cartes';
     const claimUi = g.mode === 'compte'
       ? `<div class="row center"><label>Moutons qui rentreront : <input type="text" id="cc" inputmode="numeric" value="${claimCount}" style="width:70px" aria-label="Nombre de moutons annoncé"></label></div>`
       : `<p class="center-text"><span class="claim">« Ce sont des moutons ! »</span></p>`;
     body = isAuthor
       ? `<div class="panel hand-panel"><h2>À toi de jouer !</h2><p>Choisis 1 à 3 cartes à poser devant l'enclos.</p><div class="hand" id="hand">${handCards(g.hand, true)}</div>${claimUi}
-        <div class="row center round-actions"><button id="play" class="gold" ${selected.size < 1 ? 'disabled' : ''}>Envoyer ${selected.size ? '(' + selected.size + ')' : ''}</button></div></div>`
+        <div class="row center round-actions"><button id="play" class="gold" ${selected.size < 1 ? 'disabled' : ''}>${action}</button></div></div>`
       : `<div class="panel hand-panel"><h2>${pName(g.authorId)} choisit ses cartes…</h2><div class="hand" id="hand">${handCards(g.hand, false)}</div></div>`;
   } else if (g.phase === 'voting') {
     const claim = g.claim.kind === 'all-sheep' ? 'Ce sont des moutons !' : `${g.claim.count} mouton(s) vont rentrer !`;
     const backs = Array.from({ length: g.pile }, (_, i) => `<div class="card back" style="--r:${(i - (g.pile - 1) / 2) * 8}deg" aria-hidden="true"><img src="assets/cards/back.png" alt="" draggable="false"></div>`).join('');
-    body = `<div class="panel vote-panel"><h2>${pName(g.authorId)} pose ${g.pile} carte(s) devant l'enclos</h2><p><span class="claim">« ${claim} »</span></p>
+    body = `<div class="panel vote-panel"><h2>${pName(g.authorId)} pose ${g.pile} carte${g.pile === 1 ? '' : 's'}</h2><p><span class="claim">« ${claim} »</span></p>
       <div class="pile" id="pile">${backs}</div>
       <p>Réponses : ${g.voted}/${g.voters}</p>`;
-    if (!isAuthor && !g.myVote) body += `<p>Glisse la pile à gauche pour crier AU LOUP !, à droite pour laisser entrer — ou utilise les boutons.</p>
+    if (!isAuthor && !g.myVote) body += `
       <div class="row center round-actions"><button class="red" id="vw">← AU LOUP !</button><button class="green" id="vt">Je valide →</button></div>`;
     else body += `<p>${isAuthor ? 'Les autres décident…' : 'Réponse enregistrée. En attente des autres…'}</p>`;
     body += '</div>';
@@ -563,7 +520,10 @@ function render() {
   $('#next')?.addEventListener('click', () => send({ type: 'game:next' }));
   $('#again')?.addEventListener('click', () => send({ type: 'game:start' }));
   if (g.variant) {
-    const playVariant = (action) => send({ type: 'variant:play', roundId: g.roundId, action });
+    const playVariant = (action) => {
+      if (action.kind !== 'stop') playSound('place');
+      send({ type: 'variant:play', roundId: g.roundId, action });
+    };
     $('#variant-draw')?.addEventListener('click', () => playVariant({ kind: 'draw' }));
     $('#variant-stop')?.addEventListener('click', () => playVariant({ kind: 'stop' }));
     $('#variant-play')?.addEventListener('click', () => playVariant({
@@ -577,12 +537,21 @@ function render() {
       selected.clear();
       selected.add(b.dataset.id);
     } else if (selected.size < 3) selected.add(b.dataset.id);
+    const cardId = b.dataset.id;
+    const keepFocus = document.activeElement === b;
     playSound('card');
     render();
+    if (keepFocus) $('#hand [data-id="' + CSS.escape(cardId) + '"]')?.focus({ preventScroll: true });
   });
   $('#cc')?.addEventListener('input', (e) => { claimCount = Math.max(0, Math.min(3, parseInt(e.target.value, 10) || 0)); });
-  $('#play')?.addEventListener('click', () => send({ type: 'cards:submit', roundId: g.roundId, cardIds: [...selected], claim: g.mode === 'compte' ? { kind: 'survivors', count: claimCount } : { kind: 'all-sheep' } }));
-  const vote = (choice) => send({ type: 'vote:submit', roundId: g.roundId, choice });
+  $('#play')?.addEventListener('click', () => {
+    playSound('place');
+    send({ type: 'cards:submit', roundId: g.roundId, cardIds: [...selected], claim: g.mode === 'compte' ? { kind: 'survivors', count: claimCount } : { kind: 'all-sheep' } });
+  });
+  const vote = (choice) => {
+    playSound('vote');
+    send({ type: 'vote:submit', roundId: g.roundId, choice });
+  };
   $('#vw')?.addEventListener('click', () => vote('wolf'));
   $('#vt')?.addEventListener('click', () => vote('trust'));
   const pile = $('#pile');
@@ -610,13 +579,19 @@ render();
 
 const splash = $('#splash');
 const hideSplash = () => { splash.hidden = true; };
-if (!displayCode && (!navigator.webdriver || url.searchParams.has('splash')) && !roomCode) splash.hidden = false;
+if (!displayCode && url.searchParams.has('splash') && !roomCode) splash.hidden = false;
+const settings = document.querySelector('.settings');
+document.addEventListener('pointerdown', (event) => {
+  if (settings.open && !settings.contains(event.target)) settings.open = false;
+});
 $('#mode-home').onclick = () => location.reload();
 $('#splash-play').onclick = hideSplash;
 $('#splash-rules').onclick = () => { hideSplash(); openRules(); };
-$('#share').onclick = async () => {
+async function shareGame() {
   const link = snap && !LOCAL ? `${location.origin}/room/${snap.code}` : location.origin + location.pathname.replace(/\/(room|display)\/.*$/, '/');
   const data = { title: 'AU LOUP !', text: 'Viens jouer à AU LOUP !', url: link };
   try { if (navigator.share) { await navigator.share(data); return; } } catch { return; }
   try { await navigator.clipboard.writeText(link); toast('Lien copié !'); } catch { prompt('Copie ce lien', link); }
-};
+}
+$('#share').onclick = shareGame;
+$('#share-menu').onclick = shareGame;
