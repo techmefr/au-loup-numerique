@@ -35,46 +35,68 @@ const toast = (text, ms = 2200) => {
 
 const meadow = createMeadow($('#scene'), {
   onPick: (id) => (id ? openRadial(id) : closeRadial()),
-  onAction: (id, action) => { if (action === 'bleat') { toast('Bêêê !', 1000); beep(330); } },
+  onAction: (id, action) => { if (action === 'bleat') { toast('Bêêê !', 1000); playSound('bleat'); } },
 });
 if (!displayCode) meadow.setSheep(Array.from({ length: 6 }, (_, i) => ({ id: `demo-${i}` })));
 
 window.loup = { meadow };
 let radialId = null;
 let resolving = null;
-function closeRadial() { $('#menu').innerHTML = ''; if (radialId) meadow.hold(radialId, false); radialId = null; }
-addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeRadial(); closeRules(); } });
+function syncSheepPanel() {
+  const controls = $('#game-controls');
+  if (!controls) return;
+  controls.hidden = Boolean(radialId);
+  $('#sheep-panel').hidden = !radialId;
+  $('#sheep-rename').hidden = !snap.sheep.some((sheep) => sheep.id === radialId) || snap.hostId !== snap.you;
+}
+
+function closeRadial(restoreFocus = false) {
+  if (!radialId) return;
+  $('#menu').replaceChildren();
+  meadow.hold(radialId, false);
+  radialId = null;
+  syncSheepPanel();
+  if (restoreFocus) {
+    $('#game-controls .card:not(:disabled), #game-controls #vw, #game-controls #next, #game-controls #again')?.focus({ preventScroll: true });
+  }
+}
+
+addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  closeRadial(true);
+  closeRules();
+});
 
 function openRadial(id) {
+  if (resolving) return;
+  const position = meadow.screenOf(id);
+  if (!position) return;
   closeRadial();
-  const raw = meadow.screenOf(id);
-  if (!raw) return;
-  const sc = $('#scene');
-  const inset = 101;
-  const pos = { x: Math.min(Math.max(raw.x, inset), sc.clientWidth - inset), y: Math.min(Math.max(raw.y, inset), sc.clientHeight - inset) };
+  const scene = $('#scene');
+  const inset = 94;
+  const x = Math.max(inset, Math.min(position.x, scene.clientWidth - inset));
+  const y = Math.max(inset, Math.min(position.y, scene.clientHeight - inset));
   radialId = id;
   meadow.hold(id, true);
-  const sheep = snap?.sheep.find((s) => s.id === id);
-  const canName = snap && snap.hostId === snap.you;
-  const items = Object.entries(ACTIONS);
-  const R = 70;
-  const buttons = items.map(([k, v], i) => {
-    const a = (-90 + (360 / items.length) * i) * (Math.PI / 180);
-    return `<button class="rbtn" data-a="${k}" role="menuitem" style="left:calc(50% + ${Math.cos(a) * R}px);top:calc(50% + ${Math.sin(a) * R}px)">${v}</button>`;
+
+  const actions = Object.entries(ACTIONS);
+  const radius = 66;
+  const buttons = actions.map(([action, label], i) => {
+    const angle = -Math.PI / 2 + i * 2 * Math.PI / actions.length;
+    const left = Math.cos(angle) * radius;
+    const top = Math.sin(angle) * radius;
+    return `<button class="rbtn" data-action="${action}" style="left:calc(50% + ${left}px);top:calc(50% + ${top}px)">${label}</button>`;
   }).join('');
-  const center = canName ? '<button class="rbtn rname" data-a="rename" aria-label="Donner un prénom">✎</button>' : '';
-  $('#menu').innerHTML = `<div class="radial" style="left:${pos.x}px;top:${pos.y}px" role="menu" aria-label="Actions ${sheep?.name ?? 'du mouton'}">${buttons}${center}</div>`;
-  $('#menu').firstChild.onclick = (e) => {
-    const a = e.target.closest('[data-a]')?.dataset.a;
-    if (!a) return;
-    if (a === 'rename') {
-      const name = prompt('Prénom du mouton ?');
-      if (name) send({ type: 'sheep:rename', sheepId: id, name });
-    } else if (snap) send({ type: 'sheep:action', sheepId: id, action: a });
-    else meadow.animate(id, a);
-    closeRadial();
+  $('#menu').innerHTML = `<div class="radial" style="left:${x}px;top:${y}px" role="group" aria-label="Actions du mouton">${buttons}</div>`;
+  $('#menu').firstChild.onclick = (event) => {
+    const action = event.target.closest('[data-action]')?.dataset.action;
+    if (!action) return;
+    closeRadial(true);
+    if (snap && !displayCode && snap.sheep.some((sheep) => sheep.id === id)) send({ type: 'sheep:action', sheepId: id, action });
+    else meadow.animate(id, action);
   };
-  $('#menu').querySelector('button')?.focus();
+  syncSheepPanel();
+  $('#menu button').focus({ preventScroll: true });
 }
 
 const LOCAL = location.hostname.endsWith('github.io') || url.searchParams.has('local');
@@ -98,7 +120,10 @@ ws.onmessage = (e) => {
   } else if (m.type === 'room:snapshot') {
     const changed = !snap || snap.phase !== m.phase || snap.roundId !== m.roundId;
     snap = m; err = '';
-    if (changed) selected.clear();
+    if (changed) {
+      selected.clear();
+      closeRadial();
+    }
     if (resolving && resolving.roundId !== m.roundId) resolving = null;
     meadow.setSheep(m.sheep.length || m.phase !== 'lobby' ? m.sheep : Array.from({ length: 6 }, (_, i) => ({ id: `demo-${i}` })));
     meadow.setDeposit(m.phase === 'voting' ? m.pile : 0);
@@ -121,14 +146,74 @@ function onRevealed(r) {
   meadow.stage(r, () => {
     if (resolving !== current) return;
     resolving = null;
-    beep(r.outcome === 'entered' ? (r.resolution.sheepEaten ? 220 : 560) : 180);
+    playSound(r.outcome === 'entered' && !r.resolution.sheepEaten ? 'entered' : 'result');
     render();
   });
 }
 
-function beep(freq) {
-  if ($('#mute').checked) return;
-  try { const c = new AudioContext(), o = c.createOscillator(), g = c.createGain(); o.type = 'square'; o.frequency.value = freq; g.gain.value = 0.05; o.connect(g).connect(c.destination); o.start(); o.stop(c.currentTime + 0.15); } catch {}
+const sounds = {
+  card: [{ pitch: 392, end: 370, length: 0.07, volume: 0.025 }],
+  bleat: [
+    { pitch: 315, end: 275, length: 0.12, volume: 0.031 },
+    { pitch: 288, end: 218, length: 0.15, volume: 0.023, delay: 0.13 },
+  ],
+  entered: [
+    { pitch: 392, length: 0.18, volume: 0.032 },
+    { pitch: 494, length: 0.22, volume: 0.03, delay: 0.11 },
+  ],
+  result: [
+    { pitch: 330, length: 0.15, volume: 0.027 },
+    { pitch: 294, length: 0.18, volume: 0.023, delay: 0.1 },
+  ],
+};
+let audio;
+let soundOutput;
+const mute = $('#mute');
+
+async function enableAudio() {
+  if (!audio) {
+    audio = new AudioContext();
+    soundOutput = audio.createGain();
+    soundOutput.connect(audio.destination);
+  }
+  soundOutput.gain.value = mute.checked ? 0 : 1;
+  if (audio.state === 'suspended') await audio.resume();
+}
+
+mute.onchange = () => {
+  if (mute.checked) {
+    if (soundOutput) soundOutput.gain.value = 0;
+  } else {
+    enableAudio().catch(() => {});
+  }
+};
+
+async function playSound(cue) {
+  if (mute.checked) return;
+  try {
+    await enableAudio();
+    if (mute.checked || audio.state !== 'running') return;
+    const now = audio.currentTime;
+    for (const { pitch, end = pitch, length, volume, delay = 0 } of sounds[cue]) {
+      const start = now + delay;
+      const stop = start + length;
+      const oscillator = audio.createOscillator();
+      const envelope = audio.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(pitch, start);
+      oscillator.frequency.exponentialRampToValueAtTime(end, stop);
+      envelope.gain.setValueAtTime(0, start);
+      envelope.gain.linearRampToValueAtTime(volume, start + 0.018);
+      envelope.gain.exponentialRampToValueAtTime(0.001, stop);
+      oscillator.connect(envelope);
+      envelope.connect(soundOutput);
+      oscillator.onended = () => { oscillator.disconnect(); envelope.disconnect(); };
+      oscillator.start(start);
+      oscillator.stop(stop);
+    }
+  } catch {
+    // Audio can be unavailable or blocked by the browser.
+  }
 }
 const applyCalm = () => { document.body.classList.toggle('calm', $('#calm').checked); meadow.setCalm($('#calm').checked); };
 $('#calm').onchange = applyCalm;
@@ -238,15 +323,34 @@ function render() {
   const stack = !displayCode && (g.phase === 'select' || g.phase === 'voting')
     ? `<div id="stack">Cartes restantes <b>${g.hand.length}</b></div>`
     : '';
-  app.innerHTML = stack + (displayCode && !g.reveal ? `<h2>Salle ${g.code}</h2>` : body) + `<div class="panel"><ul class="score">${board}</ul></div><div class="sr">${sheepList}</div><p class="err" role="alert">${err}</p>`;
-  document.querySelectorAll('.sr [data-sheep]').forEach((b) => { b.onclick = () => openRadial(b.dataset.sheep); });
+  const controls = displayCode && !g.reveal ? `<h2>Salle ${g.code}</h2>` : body;
+  const canSwap = !displayCode && g.phase !== 'lobby' && !resolving;
+  const returnLabel = g.phase === 'select' ? 'Revenir aux cartes' : g.phase === 'voting' ? 'Revenir au vote' : 'Revenir au résultat';
+  const gamePanel = canSwap
+    ? `<div id="game-controls">${controls}</div>
+      <section id="sheep-panel" class="panel" hidden aria-labelledby="sheep-title">
+        <h2 id="sheep-title">Jouer avec un mouton</h2>
+        <p>Choisis une action autour du mouton dans la prairie.</p>
+        <div class="row"><button id="sheep-back">${returnLabel}</button><button id="sheep-rename" hidden>Donner un prénom</button></div>
+      </section>`
+    : controls;
+  app.innerHTML = stack + gamePanel + `<div class="panel"><ul class="score">${board}</ul></div><div class="sr">${sheepList}</div><p class="err" role="alert">${err}</p>`;
+  document.querySelectorAll('.sr [data-sheep]').forEach((button) => { button.onclick = () => openRadial(button.dataset.sheep); });
+  $('#sheep-back')?.addEventListener('click', () => closeRadial(true));
+  $('#sheep-rename')?.addEventListener('click', () => {
+    const id = radialId;
+    const name = prompt('Prénom du mouton ?');
+    if (name && id) send({ type: 'sheep:rename', sheepId: id, name });
+    closeRadial(true);
+  });
+  syncSheepPanel();
   if (displayCode) return;
   $('#start')?.addEventListener('click', () => send({ type: 'game:start' }));
   $('#next')?.addEventListener('click', () => send({ type: 'game:next' }));
   $('#again')?.addEventListener('click', () => send({ type: 'game:start' }));
   document.querySelectorAll('#hand .card:not([disabled])').forEach((b) => b.onclick = () => {
     if (selected.has(b.dataset.id)) selected.delete(b.dataset.id); else if (selected.size < 3) selected.add(b.dataset.id);
-    beep(selected.has(b.dataset.id) ? 600 : 420);
+    playSound('card');
     render();
   });
   $('#cc')?.addEventListener('input', (e) => { claimCount = Math.max(0, Math.min(3, parseInt(e.target.value, 10) || 0)); });

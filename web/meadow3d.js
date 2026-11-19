@@ -116,8 +116,8 @@ export function createMeadow(container, hooks) {
     const model = new THREE.Mesh(geometry, mat(side));
     scene.add(model);
   };
-  slab(19.64, 14.36, 0.94, -0.045, 0xa87c55);
-  slab(19.72, 14.39, 0.16, -0.025, 0x76914d);
+  slab(19.64, 14.66, 1.32, -0.06, 0xa87c55);
+  slab(19.72, 14.66, 0.18, -0.025, 0x76914d);
 
   const shadowCanvas = document.createElement('canvas');
   shadowCanvas.width = shadowCanvas.height = 128;
@@ -133,15 +133,40 @@ export function createMeadow(container, hooks) {
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(shadowCanvas), transparent: true, depthWrite: false }),
   );
   tabletopShadow.rotation.x = -Math.PI / 2;
-  tabletopShadow.position.set(0.45, -1.02, 0.5);
+  tabletopShadow.position.set(0.45, -1.4, 0.5);
   scene.add(tabletopShadow);
 
-  const painted = new THREE.Mesh(new THREE.PlaneGeometry(GROUND.w, GROUND.d), new THREE.MeshBasicMaterial({ map: paintGround(), transparent: true, alphaTest: 0.12 }));
-  painted.rotation.x = -Math.PI / 2;
+  const mounds = [
+    { x: -5.1, z: 5.5, width: 1.35, depth: 1.28, height: 0.88 },
+    { x: 6.55, z: 5.2, width: 1.85, depth: 1.5, height: 1.12 },
+    { x: 9, z: 0.55, width: 0.95, depth: 1.8, height: 0.70 },
+    { x: 6.85, z: -6.55, width: 0.9, depth: 1, height: 0.65 },
+    { x: -9.1, z: 1.4, width: 0.63, depth: 1.45, height: 0.48 },
+  ];
+  const elevation = (x, z) => mounds.reduce((height, mound) => {
+    const distance = ((x - mound.x) / mound.width) ** 2 + ((z - mound.z) / mound.depth) ** 2;
+    return height + mound.height * Math.max(0, 1 - distance) ** 2;
+  }, 0);
+
+  const terrain = new THREE.PlaneGeometry(GROUND.w, GROUND.d, 100, 80);
+  terrain.rotateX(-Math.PI / 2);
+  const vertices = terrain.getAttribute('position');
+  const terrainColors = [];
+  for (let i = 0; i < vertices.count; i++) {
+    const x = vertices.getX(i), z = vertices.getZ(i);
+    const y = elevation(x, z);
+    vertices.setY(i, y);
+    const slope = (elevation(x + 0.08, z - 0.06) - y) / 0.1;
+    const shade = Math.max(0.73, Math.min(1, 0.96 - slope * 0.25 + y * 0.05));
+    terrainColors.push(shade, shade, shade);
+  }
+  terrain.setAttribute('color', new THREE.Float32BufferAttribute(terrainColors, 3));
+  const painted = new THREE.Mesh(terrain, new THREE.MeshBasicMaterial({
+    map: paintGround(), vertexColors: true, transparent: true, alphaTest: 0.12,
+  }));
   scene.add(painted);
-  const catcher = new THREE.Mesh(new THREE.PlaneGeometry(GROUND.w, GROUND.d), new THREE.ShadowMaterial({ opacity: 0.22, depthWrite: false }));
-  catcher.rotation.x = -Math.PI / 2;
-  catcher.position.y = 0.01;
+  const catcher = new THREE.Mesh(terrain, new THREE.ShadowMaterial({ opacity: 0.22, depthWrite: false }));
+  catcher.position.y = 0.012;
   catcher.receiveShadow = true;
   scene.add(catcher);
 
@@ -171,7 +196,7 @@ export function createMeadow(container, hooks) {
     } else {
       for (const [dx, dy, dz, r] of [[0, 0.45, 0, 0.75], [0.45, 0.2, 0.15, 0.52], [-0.45, 0.25, -0.1, 0.55], [0.1, 0.85, 0.05, 0.5], [0, 0.2, 0.45, 0.5]]) canopy.add(sphere(r, color, dx, dy, dz));
     }
-    tree.position.set(x, 0, z);
+    tree.position.set(x, elevation(x, z), z);
     tree.rotation.y = rand() * Math.PI * 2;
     tree.scale.setScalar(scale);
     deco.add(tree);
@@ -197,17 +222,17 @@ export function createMeadow(container, hooks) {
   }
   river.add(new THREE.LineCurve3(from, riverNodes.at(-1)));
   const waterfall = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.29, 0.94),
+    new THREE.PlaneGeometry(1.29, 1.3),
     new THREE.MeshBasicMaterial({ color: 0x51adae }),
   );
-  waterfall.position.set(-8.19, -0.48, 7.215);
+  waterfall.position.set(-8.19, -0.66, 7.345);
   deco.add(waterfall);
   const fallingWater = Array.from({ length: 9 }, (_, i) => {
     const streak = new THREE.Mesh(
       new THREE.PlaneGeometry(0.055, 0.24),
       new THREE.MeshBasicMaterial({ color: i % 2 ? 0xb5e6de : 0x75cac7 }),
     );
-    streak.position.set(-8.76 + i * 0.142, 0, 7.223);
+    streak.position.set(-8.76 + i * 0.142, 0, 7.353);
     deco.add(streak);
     return streak;
   });
@@ -237,7 +262,7 @@ export function createMeadow(container, hooks) {
     if (x < -6.1 && x > -9.2) continue;
     if (z > 0.7 && x > -0.6 && x < 3.5) continue;
     if (x > 6.5 && x < 9 && z < 0) continue;
-    tufts.push({ x, z, angle: rand() * Math.PI, scale: 0.58 + rand() * 0.75 });
+    tufts.push({ x, y: elevation(x, z), z, angle: rand() * Math.PI, scale: 0.58 + rand() * 0.75 });
   }
   const grass = new THREE.InstancedMesh(blades, new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }), tufts.length);
   const grassColors = [0x6ca638, 0x80b641, 0x94c94f, 0x568b36].map((color) => new THREE.Color(color));
@@ -254,11 +279,53 @@ export function createMeadow(container, hooks) {
       flower.add(cyl(0.025, height, 0x66823d, 0, height / 2, 0));
       flower.add(sphere(0.11, flowerColors[(i + flowers.length) % flowerColors.length], 0, height, 0, 1, 0.52, 1));
       flower.add(sphere(0.05, 0xffdc6d, 0, height + 0.045, 0));
-      flower.position.set(x + (rand() - 0.5) * 0.95, 0, z + (rand() - 0.5) * 0.85);
+      const flowerX = x + (rand() - 0.5) * 0.95;
+      const flowerZ = z + (rand() - 0.5) * 0.85;
+      flower.position.set(flowerX, elevation(flowerX, flowerZ), flowerZ);
       deco.add(flower);
       flowers.push(flower);
     }
   }
+  const reeds = [];
+  for (const [bankX, bankZ] of [[-8.75, -4.35], [-7.15, -2.7], [-6.47, 1.3], [-8.66, 4.25], [-7.5, 5.85]]) {
+    const reed = new THREE.Group();
+    for (let i = 0; i < 4; i++) {
+      const height = 0.33 + rand() * 0.35;
+      const stem = cyl(0.025, height, 0x698740, (i - 1.5) * 0.14, height / 2, i % 2 * 0.11);
+      stem.rotation.z = (i - 1.5) * 0.12;
+      reed.add(stem);
+      const seed = sphere(0.065, 0x916b49, stem.position.x - Math.sin(stem.rotation.z) * height / 2, height, stem.position.z, 0.74, 1.8, 0.74);
+      reed.add(seed);
+    }
+    reed.position.set(bankX, elevation(bankX, bankZ), bankZ);
+    deco.add(reed);
+    reeds.push(reed);
+  }
+
+  const bridge = new THREE.Group();
+  const plankGeometry = new THREE.BoxGeometry(0.205, 0.105, 0.67);
+  const wood = [0xb78351, 0xcb9861, 0xc28b56].map(mat);
+  for (let i = 0; i < 11; i++) {
+    const plank = new THREE.Mesh(plankGeometry, wood[i % wood.length]);
+    const x = (i - 5) * 0.204;
+    plank.position.set(x, 0.09 + 0.26 * (1 - (x / 1.15) ** 2), 0);
+    plank.rotation.z = -x * 0.33;
+    plank.castShadow = true;
+    bridge.add(plank);
+  }
+  for (const x of [-0.96, 0.96]) {
+    for (const z of [-0.38, 0.38]) bridge.add(cyl(0.047, 0.42, 0x856344, x, 0.31, z));
+  }
+  const railGeometry = new THREE.CylinderGeometry(0.032, 0.032, 1.99, 6).rotateZ(Math.PI / 2);
+  for (const z of [-0.38, 0.38]) {
+    const rail = new THREE.Mesh(railGeometry, wood[0]);
+    rail.position.set(0, 0.51, z);
+    bridge.add(rail);
+  }
+  bridge.position.set(-7.36, 0, -3.45);
+  bridge.rotation.y = -0.16;
+  deco.add(bridge);
+
   const butterflies = [[-5.5, 4.65, 0xffcc65], [5.5, 5.1, 0xff9bb5], [8.45, 2.75, 0xeadc8a]].map(([x, z, color], i) => {
     const body = new THREE.Group();
     const wings = [-1, 1].map((side) => {
@@ -282,6 +349,10 @@ export function createMeadow(container, hooks) {
       canopy.rotation.z = Math.sin(time * 1.7 + phase) * 0.09;
       canopy.rotation.x = Math.cos(time * 1.25 + phase) * 0.065;
     }
+    for (const reed of reeds) {
+      reed.rotation.z = Math.sin(time * 2.1 + reed.position.z * 0.75) * 0.22;
+      reed.rotation.x = Math.cos(time * 1.6 + reed.position.z) * 0.19;
+    }
     for (const flower of flowers) {
       flower.rotation.z = Math.sin(time * 2.1 + flower.position.x * 0.7 + flower.position.z) * 0.28;
       flower.rotation.x = Math.cos(time * 1.8 + flower.position.z) * 0.13;
@@ -294,8 +365,8 @@ export function createMeadow(container, hooks) {
       wings[0].rotation.z = -flap;
       wings[1].rotation.z = flap;
     }
-    tufts.forEach(({ x, z, angle, scale }, i) => {
-      instance.position.set(x, 0.015, z);
+    tufts.forEach(({ x, y, z, angle, scale }, i) => {
+      instance.position.set(x, y + 0.025, z);
       instance.rotation.set(Math.sin(time * 2.7 + z * 0.65 + x * 0.35) * 0.31, angle, 0);
       instance.scale.setScalar(scale);
       instance.updateMatrix();
@@ -316,13 +387,13 @@ export function createMeadow(container, hooks) {
     ripples.instanceMatrix.needsUpdate = true;
     fallingWater.forEach((streak, i) => {
       const fall = (time * 0.82 + i * 0.39) % 1;
-      streak.position.y = -0.065 - fall * 0.83;
+      streak.position.y = -0.065 - fall * 1.19;
       streak.scale.y = Math.min(1, fall * 7, (1 - fall) * 7);
     });
   }
   moveLandscape(0);
   for (const [x, z, scale] of [[-7.93, -3, 0.45], [-7.3, 0.2, 0.35], [-8.52, 4.23, 0.37], [-6.09, -5.12, 0.28], [6.6, 3.25, 0.22], [4.03, 6.57, 0.35]]) {
-    const rock = sphere(scale, 0xa6aaa1, x, scale * 0.28, z, 1.1, 0.54, 0.85);
+    const rock = sphere(scale, 0xa6aaa1, x, elevation(x, z) + scale * 0.28, z, 1.1, 0.54, 0.85);
     rock.rotation.y = rand() * Math.PI;
     deco.add(rock);
   }

@@ -112,20 +112,32 @@ test('solo contre l ordinateur : les bots votent et la manche se résout', async
   expect(errors).toEqual([]);
 });
 
-test('menu radial autour du mouton cliqué', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
+test('le menu entoure le mouton et remplace les cartes sur mobile', async ({ page }) => {
+  test.setTimeout(60000);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
-  await page.addStyleTag({ content: '#app{display:none!important}' });
-  await page.waitForTimeout(1200);
-  const pos = await page.evaluate(() => (window as any).loup.meadow.screenOf('demo-0'));
-  const box = (await page.locator('#scene canvas').boundingBox())!;
-  await page.mouse.click(box.x + pos.x + 4, box.y + pos.y + 6);
-  await expect(page.locator('.radial')).toBeVisible();
-  expect(await page.locator('.radial .rbtn').count()).toBeGreaterThanOrEqual(6);
-  await page.screenshot({ path: 'test-results/radial.png', clip: { x: box.x, y: box.y, width: box.width, height: box.height } });
-  await page.waitForTimeout(500);
-  await page.locator('.rbtn', { hasText: 'Sauter' }).click();
-  await expect(page.locator('.radial')).toHaveCount(0);
+  await page.fill('#name', 'Alice');
+  await expect(page.locator('#mute')).toBeChecked();
+  await page.click('#solo');
+  const cards = page.locator('#hand .card');
+  await cards.first().click();
+
+  const sheep = page.locator('[data-sheep]').first();
+  const sheepId = await sheep.getAttribute('data-sheep');
+  const canvas = page.locator('#scene canvas');
+  const position = await page.evaluate((id) => (window as any).loup.meadow.screenOf(id), sheepId);
+  await canvas.click({ position });
+  const radial = page.getByRole('group', { name: 'Actions du mouton' });
+  await expect(radial).toBeInViewport({ ratio: 1 });
+  await expect(radial.getByRole('button')).toHaveCount(6);
+  await expect(page.locator('#hand')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Revenir aux cartes' })).toBeVisible();
+
+  await radial.getByRole('button', { name: 'Bêler' }).click();
+  await expect(page.locator('#toast')).toHaveText('Bêêê !');
+  await expect(radial).toHaveCount(0);
+  await expect(cards.first()).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('mode Compte tes moutons : annonce chiffrée, vote, résolution', async ({ browser }) => {
