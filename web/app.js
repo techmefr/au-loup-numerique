@@ -4,8 +4,18 @@ const $ = (s) => document.querySelector(s);
 const app = $('#app');
 const NAME = { sheep: 'Mouton', wolf: 'Loup déguisé', dog: 'Chien déguisé' };
 const ACTIONS = { jump: 'Sauter', graze: 'Brouter', sleep: 'Dormir', bleat: 'Bêler', run: 'Courir', dance: 'Danser' };
-const MODE_INFO = { 'ni-vu': 'Tu annonces seulement « que des moutons ». Si un loup se cache dans le lot, ce n’est pas vrai. Le plus simple pour débuter.', compte: 'Tu annonces combien de moutons vont rentrer (0 à 3), en tenant compte du chien qui chasse le loup. Plus fin, plus de bluff.' };
-const MODES = { 'ni-vu': 'Ni vu ni mouton', compte: 'Compte tes moutons !' };
+const MODES = {
+  'ni-vu': ['Ni vu ni mouton', 'Annonce que ce sont des moutons. Le chien est autorisé.', 2, 8, 'Ni vu'],
+  compte: ['Compte tes moutons !', 'Annonce combien de moutons passeront le portail.', 2, 8, 'Compte'],
+  'loup-parmi-nous': ['Loup parmi nous', 'Rôles secrets. Sauvez 15 moutons ou dévorez-en 8 selon votre camp.', 3, 8, 'Rôles'],
+  'passe-ton-loup': ['Passe ton loup !', 'Passe une carte au joueur suivant. Loup et chien dans la même main font perdre.', 2, 8, 'Passe'],
+  'troupeau-de-tete': ['Troupeau de tête', 'Place une carte dans ton troupeau ou celui d’un adversaire. Le plus grand troupeau survivant gagne.', 2, 6, 'Troupeaux'],
+  'qui-sy-frotte': ['Qui s’y frotte s’y pique !', 'Pioche une carte à la fois ou arrête-toi pour garder tes points. Mode en test.', 2, 8, 'Pioche'],
+};
+const campName = (camp) => camp === 'wolf' ? 'Loups' : 'Moutons';
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+})[char]);
 const RULE_PAGES = [
   ['histoire.webp', 'Le principe en 4 images'],
   ['couverture.webp', 'Résumé des modes'],
@@ -13,7 +23,7 @@ const RULE_PAGES = [
   ['modes-3-4-5.webp', 'Modes 3, 4 et 5'],
 ];
 const ERR = {
-  room_not_found: 'Salle introuvable', not_enough_players: 'Il faut au moins 2 joueurs', room_full: 'Salle pleine',
+  need_three_players: 'Ce mode demande au moins 3 joueurs', room_not_found: 'Salle introuvable', not_enough_players: 'Il faut au moins 2 joueurs', room_full: 'Salle pleine',
   game_started: 'Partie déjà commencée', host_only: "Réservé à l'hôte", bad_selection: 'Choisis 1 à 3 cartes', stale_round: 'Manche dépassée',
 };
 
@@ -21,6 +31,7 @@ const url = new URL(location.href);
 const parts = url.pathname.split('/').filter(Boolean);
 const displayCode = parts[0] === 'display' ? parts[1] : null;
 let roomCode = parts[0] === 'room' ? parts[1] : null;
+let announcement = '', placementTarget = '';
 let snap = null, selected = new Set(), claimCount = 1, err = '', prefMode = 'ni-vu';
 
 if (displayCode) $('#scene').classList.add('big');
@@ -122,11 +133,13 @@ ws.onmessage = (e) => {
     snap = m; err = '';
     if (changed) {
       selected.clear();
+      announcement = '';
+      placementTarget = '';
       closeRadial();
     }
     if (resolving && resolving.roundId !== m.roundId) resolving = null;
     meadow.setSheep(m.sheep.length || m.phase !== 'lobby' ? m.sheep : Array.from({ length: 6 }, (_, i) => ({ id: `demo-${i}` })));
-    meadow.setDeposit(m.phase === 'voting' ? m.pile : 0);
+    meadow.setDeposit(m.phase === 'voting' ? m.pile : m.phase === 'select' ? Math.min(3, m.variant?.pile ?? 0) : 0);
     render();
     if (changed && m.phase === 'voting' && m.authorId === m.you) showMeadowOnPhone();
   } else if (m.type === 'error') { err = ERR[m.code] || m.code; render(); }
@@ -228,14 +241,14 @@ $('#rules-open').onclick = () => {
 };
 $('#rules-close').onclick = closeRules;
 
-const pName = (id) => snap.players.find((p) => p.id === id)?.name ?? '?';
+const pName = (id) => escapeHtml(snap.players.find((p) => p.id === id)?.name ?? '?');
 const cardImg = (type) => `<img src="assets/cards/${type}.png" alt="" draggable="false">`;
 const cardHtml = (c, extra = '', attrs = '') => `<button class="card ${extra}" ${attrs} data-id="${c.id ?? ''}" aria-label="${NAME[c.type]}">${cardImg(c.type)}</button>`;
 const chip = (label, value, cls = '') => `<div class="chip ${cls}"><small>${label}</small><b>${value}</b></div>`;
 
 function hud() {
   $('#chips').innerHTML = snap
-    ? chip('SALLE', snap.code) + chip('MANCHE', snap.roundNo || '–') + chip('DANS L’ENCLOS', resolving?.sheepCount ?? snap.sheep.length, 'gold') + chip('MODE', snap.mode === 'compte' ? 'COMPTE' : 'NI VU')
+    ? chip('SALLE', snap.code) + chip('MANCHE', snap.roundNo || '–') + chip('DANS L’ENCLOS', resolving?.sheepCount ?? snap.sheep.length, 'gold') + chip('MODE', MODES[snap.mode][4])
     : '';
 }
 
@@ -248,32 +261,100 @@ function handCards(cards, interactive) {
 
 function outcomeText(r, g) {
   if (r.outcome === 'entered') return r.resolution.sheepSaved ? `Le portail s'ouvre ! ${r.resolution.sheepSaved} mouton(s) rentrent dans l'enclos.` : "Le portail s'ouvre, mais aucun mouton ne rentre.";
-  if (r.outcome === 'author_took') return `${pName(r.accuserId)} a bien crié AU LOUP ! ${pName(r.authorId)} a menti et reprend la pile. Le troupeau quitte l’enclos.`;
-  return `${pName(r.accuserId)} s'est trompé : ${pName(r.authorId)} disait vrai. ${pName(r.accuserId)} ramasse la pile. Le troupeau quitte l’enclos.`;
+  if (r.outcome === 'author_took') return `${pName(r.accuserId)} a bien crié AU LOUP ! ${pName(r.authorId)} a menti et ramasse les cartes de la prairie et de la pose. Le troupeau quitte l’enclos.`;
+  return `${pName(r.accuserId)} s'est trompé : ${pName(r.authorId)} disait vrai. ${pName(r.accuserId)} ramasse les cartes de la prairie et de la pose. Le troupeau quitte l’enclos.`;
+}
+
+function faceUpCards(cards) {
+  return cards.length ? `<div class="reveal-row">${cards.map((type) => cardHtml({ type }, '', 'disabled')).join('')}</div>` : '';
+}
+
+function variantPanel(g, isAuthor, isHost) {
+  const variant = g.variant;
+  const mode = g.mode;
+  const isHidden = mode === 'loup-parmi-nous';
+  const isPass = mode === 'passe-ton-loup';
+  const isFlock = mode === 'troupeau-de-tete';
+  const isRisk = mode === 'qui-sy-frotte';
+  const finished = g.phase === 'finished';
+  const role = g.role ? `<p class="claim">Ton camp secret · ${campName(g.role)}</p>` : '';
+  const progress = isHidden
+    ? `<p>${g.sheepSaved} / 15 moutons sauvés · ${variant.sheepEaten} / 8 dévorés</p>`
+    : '';
+  const turns = variant.announcements.filter((item) => item.text).map((item) => `<li>${pName(item.playerId)} · « ${escapeHtml(item.text)} »</li>`).join('');
+  const announcements = turns ? `<ul class="small">${turns}</ul>` : '';
+  if (variant.result) {
+    const result = variant.result;
+    let summary = `${result.saved} mouton(s) sauvé(s) · ${result.eaten} dévoré(s)`;
+    if (isRisk) summary = `${pName(g.authorId)} marque ${result.saved} point(s).`;
+    if (isPass) summary = `${pName(result.loserId)} perd la manche avec un loup et un chien dans sa main.`;
+    if (isFlock) summary = 'Les chiens chassent les loups, puis les troupeaux sont comptés.';
+    const winners = result.winners?.map(pName).join(', ');
+    const victory = result.winningCamp ? `Le camp des ${campName(result.winningCamp)} gagne !`
+      : winners ? `${winners} · ${result.winners.length === 1 ? 'Victoire !' : 'Victoire partagée !'}`
+      : finished && isHidden ? 'Fin de partie · Aucun camp ne l’emporte.' : '';
+    const flocks = (result.flocks ?? []).map((flock) =>
+      `<details><summary>${pName(flock.playerId)} · ${flock.saved} survivant(s)</summary>${faceUpCards(flock.cards)}</details>`).join('');
+    const roles = Object.entries(variant.roles).map(([id, camp]) => `${pName(id)} · ${campName(camp)}`).join(' / ');
+    const buttons = isHost ? `<div class="row"><button class="gold" id="${finished ? 'again' : 'next'}">${finished ? 'Rejouer' : isRisk ? 'Joueur suivant' : 'Manche suivante'}</button>
+      </div>` : '';
+    return `<section class="panel"><h2>${finished ? 'Fin de partie' : 'Résultat'}</h2>${role}${progress}<p>${summary}</p>
+      ${victory ? `<p class="verdict good">${victory}</p>` : ''}${roles ? `<p class="small">${roles}</p>` : ''}
+      ${faceUpCards(result.cards)}${flocks}${announcements}${buttons}</section>`;
+  }
+  const nextPlayer = g.players[(g.players.findIndex((player) => player.id === g.authorId) + 1) % g.players.length];
+  const flockCounts = isFlock ? `<ul class="score">${variant.flocks.map((flock) => `<li>${pName(flock.playerId)} · ${flock.count} carte(s)</li>`).join('')}</ul>` : '';
+  const current = isAuthor ? 'À toi de jouer !' : `Au tour de ${pName(g.authorId)}`;
+  if (isRisk) {
+    return `<section class="panel"><h2>${current}</h2><p>Pioche · ${variant.deck} carte(s)</p>
+      <p class="claim">${variant.turnSheep} mouton(s) · ${variant.shields} protection(s)</p>
+      ${faceUpCards(variant.turnCards)}
+      ${isAuthor ? `<div class="row"><button id="variant-draw" class="gold">Piocher</button>
+        <button id="variant-stop" ${variant.turnCards.length ? '' : 'disabled'}>J’arrête</button></div>` : ''}</section>`;
+  }
+  const instruction = isHidden ? 'Pose 1 à 3 cartes dans la bergerie.'
+    : isPass ? `Choisis une carte à passer à ${pName(nextPlayer.id)}.` : 'Choisis une carte et le troupeau qui la recevra.';
+  const target = isFlock ? `<label class="inline">Destination <select id="flock-target">${g.players.map((player) =>
+    `<option value="${player.id}" ${(placementTarget || g.you) === player.id ? 'selected' : ''}>${pName(player.id)}</option>`).join('')}</select></label>` : '';
+  const claim = isHidden ? `<label class="f">Ton annonce <input id="announcement" type="text" maxlength="80" value="${escapeHtml(announcement)}"></label>` : '';
+  return `<section class="panel"><h2>${current}</h2>${role}${progress}
+    ${isHidden ? `<p>${variant.pile} carte(s) dans la bergerie</p>` : ''}${flockCounts}${announcements}
+    ${isAuthor ? `<p>${instruction}</p>` : ''}${g.hand?.length ? `<div class="hand" id="hand">${handCards(g.hand, isAuthor)}</div>` : ''}
+    ${isAuthor ? `${claim}<div class="row">${target}<button class="gold" id="variant-play" ${selected.size ? '' : 'disabled'}>${isPass ? 'Passer la carte' : 'Poser'}</button></div>` : ''}</section>`;
 }
 
 function render() {
   hud();
+  $('#mode-home').hidden = !LOCAL || !snap;
   document.body.classList.toggle('home', !displayCode && (!snap || snap.phase === 'lobby'));
   if (!snap) document.body.classList.remove('ingame');
   if (!snap) {
     if (displayCode) { app.innerHTML = '<div class="panel">Connexion à la salle…</div>'; return; }
     const s = saved();
     app.innerHTML = `<div class="panel"><h2>Bienvenue dans la prairie</h2>
-      <p>Pose 1 à 3 cartes devant l'enclos. Les autres décident : laisser entrer… ou crier AU LOUP !</p>
-      <label class="f">Ton prénom<input type="text" id="name" maxlength="16" value="${s.name ?? ''}"></label>
+      <p>Choisis un des six modes du jeu.</p>
+      <label class="f">Ton prénom<input type="text" id="name" maxlength="16" value="${escapeHtml(s.name)}"></label>
       <fieldset class="modes"><legend>Mode de jeu</legend>
-        ${Object.entries(MODES).map(([k, v]) => `<label class="mode"><input type="radio" name="mode" value="${k}" ${prefMode === k ? 'checked' : ''}><b>${v}</b><span>${MODE_INFO[k]}</span></label>`).join('')}
+        ${Object.entries(MODES).map(([key, [title, description, min, max]]) => `<label class="mode"><input type="radio" name="mode" value="${key}" ${prefMode === key ? 'checked' : ''}><b>${title}</b><span>${min} à ${max} joueurs · ${description}</span></label>`).join('')}
       </fieldset>
       <div class="row"><button id="rules-home">Voir les règles illustrées</button></div>
       <div class="row"><button id="solo" class="gold">Jouer contre l'ordinateur</button>
-        <label class="inline">Adversaires <select id="bots"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></label></div>
+        <label class="inline">Adversaires <select id="bots"></select></label></div>
       ${LOCAL ? '<p class="small">Version en ligne : tu joues contre les ordinateurs, directement dans ton navigateur. Le multijoueur entre amis demande le serveur (voir le README).</p>' : `<div class="row"><button id="create">Créer une partie entre amis</button></div>
-      <label class="f">Code de la salle<input type="text" id="code" maxlength="4" value="${roomCode ?? ''}" style="text-transform:uppercase"></label>
+      <label class="f">Code de la salle<input type="text" id="code" maxlength="4" value="${escapeHtml(roomCode)}" style="text-transform:uppercase"></label>
       <div class="row"><button id="join" class="green">Rejoindre une partie</button></div>`}
       <p class="err" role="alert">${err}</p></div>`;
     const name = () => { const n = $('#name').value.trim() || 'Mouton'; localStorage.setItem('loup', JSON.stringify({ ...saved(), name: n })); return n; };
     const mode = () => { prefMode = document.querySelector('[name=mode]:checked').value; return prefMode; };
+    const updateBots = () => {
+      const bots = $('#bots');
+      const previous = Number(bots.value) || 2;
+      const [, , min, max] = MODES[mode()];
+      bots.replaceChildren(...Array.from({ length: max - min + 1 }, (_, i) => new Option(i + min - 1, i + min - 1)));
+      bots.value = String(Math.min(max - 1, Math.max(min - 1, previous)));
+    };
+    document.querySelectorAll('[name=mode]').forEach((radio) => radio.onchange = updateBots);
+    updateBots();
     $('#rules-home').onclick = () => $('#rules-open').click();
     $('#solo').onclick = () => send({ type: 'room:create', displayName: name(), voteSeconds: 60, mode: mode(), bots: Number($('#bots').value), solo: true });
     if (!LOCAL) $('#create').onclick = () => send({ type: 'room:create', displayName: name(), voteSeconds: 60, mode: mode() });
@@ -284,8 +365,10 @@ function render() {
   let body = '';
   if (g.phase === 'lobby') {
     const link = `${location.origin}/room/${g.code}`;
-    body = `<div class="panel"><h2>Salle ${g.code}</h2><div class="row">${LOCAL ? '' : `<img class="qr" src="qr/${g.code}.svg" alt="QR code pour rejoindre la salle ${g.code}" width="150" height="150">`}<div><div class="codebox" aria-hidden="true">${g.code}</div><p>Mode : ${MODES[g.mode]}</p><p>Lien : <a href="${link}">${link}</a></p><p>Écran partagé : <a href="/display/${g.code}" target="_blank">/display/${g.code}</a></p></div></div>
-      ${isHost ? `<button id="start" class="gold" ${g.players.length < 2 ? 'disabled' : ''}>Lancer la partie (${g.players.length} joueurs)</button>` : '<p>En attente de l’hôte…</p>'}</div>`;
+    body = `<div class="panel"><h2>Salle ${g.code}</h2><div class="row">${LOCAL ? '' : `<img class="qr" src="qr/${g.code}.svg" alt="QR code pour rejoindre la salle ${g.code}" width="150" height="150">`}<div><div class="codebox" aria-hidden="true">${g.code}</div><p>Mode : ${MODES[g.mode][0]}</p><p>Lien : <a href="${link}">${link}</a></p><p>Écran partagé : <a href="/display/${g.code}" target="_blank">/display/${g.code}</a></p></div></div>
+      ${isHost ? `<button id="start" class="gold" ${g.players.length < g.minPlayers ? 'disabled' : ''}>Lancer la partie (${g.players.length} joueurs)</button>` : '<p>En attente de l’hôte…</p>'}</div>`;
+  } else if (g.variant) {
+    body = variantPanel(g, isAuthor && !displayCode, isHost && !displayCode);
   } else if (g.phase === 'select') {
     const claimUi = g.mode === 'compte'
       ? `<div class="row center"><label>Moutons qui rentreront : <input type="text" id="cc" inputmode="numeric" value="${claimCount}" style="width:70px" aria-label="Nombre de moutons annoncé"></label></div>`
@@ -317,13 +400,13 @@ function render() {
       <div class="row center">${isHost ? `<button class="gold" id="${g.phase === 'finished' ? 'again' : 'next'}">${g.phase === 'finished' ? 'Rejouer' : 'Manche suivante'}</button>` : '<span>En attente de l’hôte…</span>'}</div></div>`;
     if (g.phase === 'finished') body = body.replace('id="next"', 'id="again"');
   }
-  const board = (resolving?.players ?? g.players).map((p) => `<li class="${p.id === you ? 'me' : ''} ${p.id === g.authorId && g.phase !== 'lobby' ? 'turn' : ''}"><span class="dot ${p.connected ? '' : 'off'}"></span><span>${p.bot ? '🤖 ' : ''}${p.name}${p.id === g.hostId ? ' 👑' : ''}${p.id === you ? ' (toi)' : ''}</span><span class="cards-left"><img src="assets/cards/back.png" alt="cartes en main" width="16" height="22"> ${p.cards}</span><span class="pts">🐑 ${p.score}</span></li>`).join('');
-  const sheepList = (resolving ? g.sheep.slice(0, resolving.sheepCount) : g.sheep).map((s, i) => `<button class="sr" data-sheep="${s.id}">Mouton ${s.name || i + 1} : actions</button>`).join('');
+  const board = (resolving?.players ?? g.players).map((p) => `<li class="${p.id === you ? 'me' : ''} ${p.id === g.authorId && g.phase !== 'lobby' ? 'turn' : ''}"><span class="dot ${p.connected ? '' : 'off'}"></span><span>${p.bot ? '🤖 ' : ''}${escapeHtml(p.name)}${p.id === g.hostId ? ' 👑' : ''}${p.id === you ? ' (toi)' : ''}</span><span class="cards-left"><img src="assets/cards/back.png" alt="cartes en main" width="16" height="22"> ${p.cards}</span><span class="pts">🐑 ${p.score}</span></li>`).join('');
+  const sheepList = (resolving ? g.sheep.slice(0, resolving.sheepCount) : g.sheep).map((s, i) => `<button class="sr" data-sheep="${s.id}">Mouton ${escapeHtml(s.name || i + 1)} : actions</button>`).join('');
   document.body.classList.toggle('ingame', !displayCode && g.phase !== 'lobby');
   const stack = !displayCode && (g.phase === 'select' || g.phase === 'voting')
     ? `<div id="stack">Cartes restantes <b>${g.hand.length}</b></div>`
     : '';
-  const controls = displayCode && !g.reveal ? `<h2>Salle ${g.code}</h2>` : body;
+  const controls = displayCode && !g.reveal && !g.variant ? `<h2>Salle ${g.code}</h2>` : body;
   const canSwap = !displayCode && g.phase !== 'lobby' && !resolving;
   const returnLabel = g.phase === 'select' ? 'Revenir aux cartes' : g.phase === 'voting' ? 'Revenir au vote' : 'Revenir au résultat';
   const gamePanel = canSwap
@@ -348,8 +431,21 @@ function render() {
   $('#start')?.addEventListener('click', () => send({ type: 'game:start' }));
   $('#next')?.addEventListener('click', () => send({ type: 'game:next' }));
   $('#again')?.addEventListener('click', () => send({ type: 'game:start' }));
+  if (g.variant) {
+    const playVariant = (action) => send({ type: 'variant:play', roundId: g.roundId, action });
+    $('#variant-draw')?.addEventListener('click', () => playVariant({ kind: 'draw' }));
+    $('#variant-stop')?.addEventListener('click', () => playVariant({ kind: 'stop' }));
+    $('#variant-play')?.addEventListener('click', () => playVariant({
+      kind: 'place', cardIds: [...selected], targetId: placementTarget || g.you, announcement,
+    }));
+    $('#announcement')?.addEventListener('input', (event) => { announcement = event.target.value; });
+    $('#flock-target')?.addEventListener('change', (event) => { placementTarget = event.target.value; });
+  }
   document.querySelectorAll('#hand .card:not([disabled])').forEach((b) => b.onclick = () => {
-    if (selected.has(b.dataset.id)) selected.delete(b.dataset.id); else if (selected.size < 3) selected.add(b.dataset.id);
+    if (selected.has(b.dataset.id)) selected.delete(b.dataset.id); else if (g.variant && g.mode !== 'loup-parmi-nous') {
+      selected.clear();
+      selected.add(b.dataset.id);
+    } else if (selected.size < 3) selected.add(b.dataset.id);
     playSound('card');
     render();
   });
@@ -371,6 +467,7 @@ render();
 const splash = $('#splash');
 const hideSplash = () => { splash.hidden = true; };
 if (!displayCode && (!navigator.webdriver || url.searchParams.has('splash')) && !roomCode) splash.hidden = false;
+$('#mode-home').onclick = () => location.reload();
 $('#splash-play').onclick = hideSplash;
 $('#splash-rules').onclick = () => { hideSplash(); $('#rules-open').click(); };
 $('#share').onclick = async () => {

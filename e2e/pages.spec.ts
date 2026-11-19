@@ -25,8 +25,53 @@ test('splash, choix du mode expliqué, bouton partager', async ({ page }) => {
   await expect(page.locator('#splash')).toBeVisible();
   await page.click('#splash-play');
   await expect(page.locator('#splash')).toBeHidden();
-  await expect(page.locator('.mode')).toHaveCount(2);
+  await expect(page.locator('.mode')).toHaveCount(6);
   await expect(page.locator('#share')).toBeVisible();
   await page.click('#rules-home');
   await expect(page.locator('#rules')).toBeVisible();
+});
+
+test('les quatre autres modes du livret sont jouables en solo', async ({ page }) => {
+  test.setTimeout(120000);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const home = 'http://localhost:4173/au-loup-numerique/?local=1';
+  const startMode = async (mode: string) => {
+    await page.goto(home);
+    await page.fill('#name', 'Alice');
+    await page.locator(`input[name=mode][value=${mode}]`).check();
+  };
+
+  await startMode('loup-parmi-nous');
+  await expect(page.locator('#bots option').first()).toHaveAttribute('value', '2');
+  await page.click('#solo');
+  await expect(page.getByText(/Ton camp secret/)).toBeVisible();
+  await page.locator('#hand .card').first().click();
+  await page.fill('#announcement', 'Je mène le troupeau');
+  await page.click('#variant-play');
+  await expect(page.getByText(/Je mène le troupeau/)).toBeVisible();
+  await expect(page.locator('#next')).toBeVisible({ timeout: 12000 });
+
+  await startMode('passe-ton-loup');
+  await page.selectOption('#bots', '1');
+  await page.click('#solo');
+  await page.getByRole('button', { name: /^(Loup|Chien) déguisé$/ }).first().click();
+  await page.click('#variant-play');
+  await expect(page.getByText(/perd la manche avec un loup et un chien/)).toBeVisible();
+
+  await startMode('troupeau-de-tete');
+  await expect(page.locator('#bots option').last()).toHaveAttribute('value', '5');
+  await page.click('#solo');
+  await page.locator('#hand .card').first().click();
+  await page.locator('#flock-target').selectOption({ index: 1 });
+  await page.click('#variant-play');
+  await expect(page.getByText(/Bella · [1-3] carte/)).toBeVisible();
+
+  await startMode('qui-sy-frotte');
+  await page.click('#solo');
+  await expect(page.locator('#variant-stop')).toBeDisabled();
+  await page.click('#variant-draw');
+  await expect(page.locator('.reveal-row .card')).toHaveCount(1);
+  await page.click('#variant-stop');
+  await expect(page.getByText(/Alice marque [01] point/)).toBeVisible();
+  await expect(page.locator('#next')).toBeVisible();
 });

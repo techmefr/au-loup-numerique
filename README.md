@@ -21,7 +21,7 @@ Les effets révélés doivent rester **enfantins et non violents** :
 
 ## Portée initiale
 
-**MVP : un seul mode numérique de bluff collectif**. Ne pas implémenter d'office les six modes du jeu physique. Garder une architecture capable d'en ajouter, mais aucune règle non décidée ne doit être présentée comme définitive.
+**Point de départ du MVP.** Le bluff collectif a été la première mécanique numérique. La liste des modes disponibles et les conventions numériques figurent ci-dessous.
 
 1. Créer/rejoindre une salle par code court + QR.
 2. Démarrer une partie à 2–8 joueurs.
@@ -108,7 +108,15 @@ Cartes : 36 moutons, 16 loups déguisés, 8 chiens déguisés, dos identiques. C
 
 Adversaires ordinateur : « Jouer contre l'ordinateur » crée une salle avec 1 à 7 joueurs contrôlés par le serveur (bluff 35 %, vote selon la taille de la pile et les cartes restantes au poseur).
 
-Pas encore implémentés : modes 3 à 6 du fascicule (consultables dans « Règles illustrées »), qui restent à valider avec l'auteur. Les visuels (cartes, logo, pages de règles) sont issus des images fournies par l'auteur (`web/assets`), le décor 3D est en voxels générés dans le code.
+Les six modes sont disponibles contre les ordinateurs et dans un salon hébergé par le serveur.
+
+- **Ni vu ni mouton** et **Compte tes moutons !** (2 à 8). Le joueur sanctionné reprend les cartes déjà entrées dans la prairie et celles de la pose qui déclenche l’accusation.
+- **Loup parmi nous** (3 à 8). Les rôles restent privés. On révèle la bergerie après le tour de table. Les Moutons visent 15 sauvés, les Loups 8 dévorés. La version numérique prévoit une égalité si les deux camps atteignent leur objectif au même tour ou si les cartes s’épuisent avant qu’un camp atteigne son objectif.
+- **Passe ton loup !** (2 à 8). La distribution place au moins un chien et un loup dans des mains distinctes. Le destinataire qui réunit les deux termine la manche et perd.
+- **Troupeau de tête** (2 à 6). Chacun commence avec trois cartes et repioche après chaque pose tant que le paquet le permet. Les troupeaux sont révélés quand toutes les cartes sont posées. Les ex æquo partagent la victoire.
+- **Qui s’y frotte s’y pique !** (2 à 8, mode en test). Un chien protège contre un prochain loup du même tour. Chaque joueur choisit quand encaisser ses points. La partie se termine à la fin de la pioche. Les ex æquo partagent la victoire.
+
+Les illustrations du livret et les cartes se trouvent dans `web/assets`.
 
 ## GitHub Pages
 

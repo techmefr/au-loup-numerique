@@ -1,5 +1,5 @@
 import { randomUUID } from '../engine/random.js';
-import { Game, GameError, type Vote } from '../engine/game.js';
+import { Game, GameError, type VariantAction, type Vote } from '../engine/game.js';
 import { BOT_NAMES, chooseMove, chooseVote } from '../engine/bot.js';
 import type { Claim } from '../engine/resolve.js';
 
@@ -67,7 +67,7 @@ export class Room {
   start(id: string): void {
     if (id !== this.hostId) throw new GameError('host_only');
     this.game.start();
-    this.sheep = Array.from({ length: INITIAL_FLOCK }, () => ({ id: randomUUID() }));
+    this.sheep = Array.from({ length: this.game.isBluff ? INITIAL_FLOCK : 0 }, () => ({ id: randomUUID() }));
     this.armTimer();
     this.broadcast();
   }
@@ -75,6 +75,15 @@ export class Room {
   submit(id: string, cardIds: string[], claim: Claim): void {
     this.game.submit(id, cardIds, claim);
     this.armTimer();
+    this.broadcast();
+  }
+
+  playVariant(id: string, action: VariantAction): void {
+    const g = this.game;
+    g.playVariant(id, action);
+    if (g.variantResult && g.mode !== 'passe-ton-loup') {
+      for (let i = 0; i < g.variantResult.saved; i++) this.sheep.push({ id: randomUUID() });
+    }
     this.broadcast();
   }
 
@@ -148,8 +157,12 @@ export class Room {
     this.botTimers.clear();
     if (g.phase === 'select' && g.author.bot) {
       const roundId = g.roundId;
-      this.later(rand(1400, 2400), () => {
+      this.later(g.isBluff ? rand(1400, 2400) : rand(500, 950), () => {
         if (g.roundId !== roundId || g.phase !== 'select') return;
+        if (!g.isBluff) {
+          this.playVariant(g.author.id, this.variantBotMove());
+          return;
+        }
         const move = chooseMove(g.author.hand, g.mode);
         this.submit(g.author.id, move.cardIds, move.claim);
       });
@@ -162,6 +175,27 @@ export class Room {
         });
       }
     }
+  }
+
+  private variantBotMove(): VariantAction {
+    const g = this.game, player = g.author;
+    if (g.mode === 'qui-sy-frotte') {
+      const stop = g.turnCards.length >= 4 || (g.turnSheep > 0 && g.shields === 0 && Math.random() < 0.68);
+      return { kind: stop ? 'stop' : 'draw' };
+    }
+    if (g.mode === 'passe-ton-loup') {
+      const cards = player.hand.filter((card) => card.type !== 'sheep');
+      const options = cards.length && Math.random() < 0.7 ? cards : player.hand;
+      return { kind: 'place', cardIds: [options[Math.floor(Math.random() * options.length)]!.id] };
+    }
+    if (g.mode === 'troupeau-de-tete') {
+      const card = player.hand.find((entry) => entry.type === 'wolf') ?? player.hand[0]!;
+      const opponent = g.players[(g.authorIndex + 1) % g.players.length]!;
+      return { kind: 'place', cardIds: [card.id], targetId: card.type === 'wolf' ? opponent.id : player.id };
+    }
+    const preferred = g.roles.get(player.id) === 'wolf' ? 'wolf' : 'sheep';
+    const cards = player.hand.filter((card) => card.type === preferred || (preferred === 'sheep' && card.type === 'dog'));
+    return { kind: 'place', cardIds: (cards.length ? cards : player.hand.slice(0, 1)).map((card) => card.id), announcement: 'Des moutons en approche !' };
   }
 
   private emit(msg: unknown): void {
@@ -177,6 +211,20 @@ export class Room {
       code: this.code,
       hostId: this.hostId,
       phase: g.phase,
+      minPlayers: g.minPlayers,
+      pastureCards: g.pasture.length,
+      variant: g.isBluff ? null : {
+        pile: g.mode === 'loup-parmi-nous' ? g.pile.length : 0,
+        deck: g.deck.length,
+        sheepEaten: g.sheepEaten,
+        announcements: g.announcements,
+        flocks: [...g.flocks].map(([playerId, cards]) => ({ playerId, count: cards.length })),
+        turnCards: g.turnCards,
+        turnSheep: g.turnSheep,
+        shields: g.shields,
+        result: g.variantResult,
+        roles: g.phase === 'finished' ? Object.fromEntries(g.roles) : {},
+      },
       roundNo: g.roundNo,
       roundId: g.roundId,
       authorId: g.phase === 'lobby' ? null : g.author.id,
@@ -195,7 +243,7 @@ export class Room {
 
   snapshotFor(id: string): Record<string, unknown> {
     const p = this.game.player(id);
-    return { ...this.publicSnapshot(), you: id, hand: p.hand, myVote: this.game.votes.get(id) ?? null };
+    return { ...this.publicSnapshot(), you: id, hand: p.hand, role: this.game.roles.get(id) ?? null, myVote: this.game.votes.get(id) ?? null };
   }
 
   broadcast(): void {
