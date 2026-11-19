@@ -279,3 +279,10 @@ main > .sr:focus-within { position: static; width: auto; height: auto; overflow:
   body.ingame { grid-template-columns: minmax(0, 1.75fr) minmax(330px, 1fr); }
   .ingame .scene { height: clamp(420px, 74svh, 820px); }
 }
+.confetti{position:fixed;inset:0;z-index:50;pointer-events:none;overflow:hidden}
+.confetti i{position:absolute;top:-16px;width:10px;height:16px;border-radius:2px;animation:conf linear both}
+@keyframes conf{to{transform:translate(var(--dx),110vh) rotate(var(--r))}}
+.confetti .party{position:absolute;left:0;right:0;bottom:12%;text-align:center;font-size:56px;animation:hop .55s ease-in-out 6}
+@keyframes hop{50%{transform:translateY(-34px) scale(1.12)}}
+.verdict.victory{animation:pop .7s ease-out both;font-size:1.25em}
+@keyframes pop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}

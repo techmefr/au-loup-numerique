@@ -468,7 +468,8 @@ function render() {
     body = '<div class="panel" role="status"><h2>Regarde le portail…</h2><p>La manche se joue dans la prairie.</p></div>';
   } else {
     const r = g.reveal;
-    const win = g.winnerId ? `<div class="verdict good">${pName(g.winnerId)} n'a plus de cartes : VICTOIRE !</div>` : '';
+    const win = g.winnerId ? `<div class="verdict good victory">🏆 ${pName(g.winnerId)} n'a plus de cartes : VICTOIRE !</div>` : '';
+    if (g.winnerId) celebrate(g.winnerId + ':' + g.phase);
     body = `<div class="panel reveal"><div class="verdict ${r.lie ? 'bad' : 'good'}">${r.lie ? 'BLUFF !' : 'HONNÊTE !'}</div>
       <div class="reveal-row">${r.cards.map((t, i) => cardHtml({ type: t }, 'big', `style="--i:${i}" disabled`)).join('')}</div>
       <p class="center-text">${outcomeText(r, g)}</p>
@@ -553,3 +554,25 @@ $('#share').onclick = async () => {
   try { if (navigator.share) { await navigator.share(data); return; } } catch { return; }
   try { await navigator.clipboard.writeText(link); toast('Lien copié !'); } catch { prompt('Copie ce lien', link); }
 };
+
+let celebrated = '';
+function celebrate(key) {
+  if (celebrated === key) return;
+  celebrated = key;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const box = document.createElement('div');
+  box.className = 'confetti';
+  box.setAttribute('aria-hidden', 'true');
+  const colors = ['#f5c542', '#e8503a', '#5cb85c', '#4aa3df', '#fff', '#d97ad9'];
+  for (let i = 0; i < 90; i++) {
+    const p = document.createElement('i');
+    p.style.cssText = `left:${Math.random() * 100}%;background:${colors[i % colors.length]};--dx:${(Math.random() - 0.5) * 220}px;--r:${Math.random() * 900 - 450}deg;animation-delay:${Math.random() * 0.9}s;animation-duration:${2.6 + Math.random() * 1.8}s`;
+    box.appendChild(p);
+  }
+  const sheep = document.createElement('div');
+  sheep.className = 'party';
+  sheep.textContent = '🐑🐑🐑';
+  box.appendChild(sheep);
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 5500);
+}
