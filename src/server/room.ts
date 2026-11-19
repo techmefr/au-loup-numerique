@@ -89,6 +89,8 @@ export class Room {
     const r = this.game.lastReveal!;
     if (r.outcome === 'entered') {
       for (let i = 0; i < r.resolution.sheepSaved; i++) this.sheep.push({ id: randomUUID() });
+    } else {
+      this.sheep = [];
     }
     this.emit({ type: 'round:revealed', reveal: r });
     this.broadcast();

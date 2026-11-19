@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-test('deux joueurs jouent une manche complète', async ({ browser }) => {
+test('deux joueurs agrandissent puis vident le troupeau', async ({ browser }) => {
+  test.setTimeout(90000);
   const host = await (await browser.newContext()).newPage();
   const guest = await (await browser.newContext()).newPage();
 
@@ -36,7 +37,16 @@ test('deux joueurs jouent une manche complète', async ({ browser }) => {
   await expect(host.locator('#chips .gold b')).toHaveText(String(initialFlock + 1));
 
   await host.click('#next');
-  await expect(guest.getByText('Bob choisit') .or(guest.getByText('À toi de jouer !'))).toBeVisible();
+  await expect(guest.getByText('À toi de jouer !')).toBeVisible();
+  await guest.locator('#hand .card').first().click();
+  await guest.click('#play');
+  await host.click('#vw');
+  await expect(host.getByRole('heading', { name: 'Regarde le portail…' })).toBeVisible();
+  await expect(host.locator('#chips .gold b')).toHaveText(String(initialFlock + 1));
+  await expect(host.locator('.reveal')).toBeVisible({ timeout: 10000 });
+  await expect(host.locator('#chips .gold b')).toHaveText('0');
+  await expect(guest.locator('#chips .gold b')).toHaveText('0', { timeout: 10000 });
+  await Promise.all([host.context().close(), guest.context().close()]);
 });
 
 test('la prairie 3D se dessine sans erreur', async ({ page }) => {
@@ -71,6 +81,7 @@ test('capture d une partie en cours', async ({ browser }) => {
   await b.click('#vt');
   await a.waitForTimeout(2300);
   await a.screenshot({ path: 'test-results/revelation.png' });
+  await Promise.all([a.context().close(), b.context().close()]);
 });
 
 test('solo contre l ordinateur : les bots votent et la manche se résout', async ({ browser }) => {

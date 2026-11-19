@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GROUND, paintGround } from './ground.js';
+import { GROUND, paintGround, riverPoints } from './ground.js';
 
 const TOP = 0;
 const ACTION_MS = { jump: 600, dance: 1200, bleat: 900, sleep: 3500, graze: 2200, run: 1400 };
@@ -93,16 +93,109 @@ export function createMeadow(container, hooks) {
   const rand = rng(11);
   const deco = new THREE.Group();
   scene.add(deco);
-  const tree = (x, z, color, s = 1) => {
-    const t = new THREE.Group();
-    t.add(cyl(0.12 * s, 0.7 * s, 0x8e623b, 0, 0.35 * s, 0));
-    for (const [dx, dy, dz, r] of [[0, 1.1, 0, 0.75], [0.45, 0.85, 0.15, 0.52], [-0.45, 0.9, -0.1, 0.55], [0.1, 1.5, 0.05, 0.5], [0, 0.85, 0.45, 0.5]]) t.add(sphere(r * s, color, dx * s, dy * s, dz * s));
-    t.position.set(x, 0, z);
-    deco.add(t);
+  const canopies = [];
+  const tree = (x, z, color, scale, shape = 'round') => {
+    const tree = new THREE.Group();
+    const canopy = new THREE.Group();
+    canopy.position.y = 0.65;
+    tree.add(cyl(0.12, 0.85, 0x8e623b, 0, 0.425, 0), canopy);
+    if (shape === 'fir') {
+      for (let i = 0; i < 3; i++) canopy.add(cone(0.78 - i * 0.16, 1.15, color, 0, 0.35 + i * 0.43, 0));
+    } else if (shape === 'tall') {
+      canopy.add(sphere(0.73, color, 0, 0.68, 0, 0.72, 1.45, 0.78));
+      canopy.add(sphere(0.46, color, -0.23, 0.42, 0.2));
+    } else {
+      for (const [dx, dy, dz, r] of [[0, 0.45, 0, 0.75], [0.45, 0.2, 0.15, 0.52], [-0.45, 0.25, -0.1, 0.55], [0.1, 0.85, 0.05, 0.5], [0, 0.2, 0.45, 0.5]]) canopy.add(sphere(r, color, dx, dy, dz));
+    }
+    tree.position.set(x, 0, z);
+    tree.rotation.y = rand() * Math.PI * 2;
+    tree.scale.setScalar(scale);
+    deco.add(tree);
+    canopies.push({ canopy, phase: x * 0.4 + z * 0.15 });
   };
-  const greens = [0x5aa63a, 0x6cb844, 0x4e9a35];
-  [[-9.4, -7.2], [-5.6, -7.0], [6.9, -7.2], [9.6, -6.6], [9.4, 5.2], [-4.4, 7.2], [6.8, 7.0], [8.6, -1.0], [-9.4, 7.0], [2.4, -7.6]].forEach(([x, z], i) => tree(x, z, greens[i % 3], 0.9 + rand() * 0.5));
+  const trees = [
+    [-9.4, -7.2, 0x407e55, 'fir'], [-5.6, -7, 0x6cb844, 'round'],
+    [6.9, -7.2, 0x589b46, 'tall'], [9.6, -6.6, 0x39754e, 'fir'],
+    [9.4, 5.2, 0x78a843, 'round'], [-4.4, 7.2, 0x599d49, 'tall'],
+    [6.8, 7, 0x487d43, 'round'], [8.6, -1, 0x6aa845, 'tall'],
+    [-9.4, 7, 0x39865a, 'fir'], [2.4, -7.6, 0x83a748, 'round'],
+  ];
+  for (const [x, z, color, shape] of trees) tree(x, z, color, 0.95 + rand() * 0.4, shape);
   tree(-9.2, 1.6, 0xe97aa6, 1.1);
+
+  const river = new THREE.CurvePath();
+  const riverNodes = riverPoints.map(([x, z]) => new THREE.Vector3(x, 0.025, z));
+  let from = riverNodes[0];
+  for (let i = 1; i < riverNodes.length - 1; i++) {
+    const to = riverNodes[i].clone().lerp(riverNodes[i + 1], 0.5);
+    river.add(new THREE.QuadraticBezierCurve3(from, riverNodes[i], to));
+    from = to;
+  }
+  river.add(new THREE.LineCurve3(from, riverNodes.at(-1)));
+  const ripples = new THREE.InstancedMesh(
+    new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0xc7edff, transparent: true, opacity: 0.68, depthWrite: false }),
+    30,
+  );
+  const currents = Array.from({ length: ripples.count }, (_, i) => ({
+    start: i / ripples.count,
+    lane: (rand() - 0.5) * 1.13,
+    length: 0.19 + rand() * 0.35,
+  }));
+  ripples.frustumCulled = false;
+  deco.add(ripples);
+
+  const blades = new THREE.BufferGeometry();
+  blades.setAttribute('position', new THREE.Float32BufferAttribute([
+    -0.045, 0, 0, 0.045, 0, 0, -0.055, 0.29, 0.01,
+    -0.025, 0, 0.03, 0.06, 0, 0.03, 0.13, 0.22, 0.04,
+    0, 0, -0.04, 0.08, 0, -0.04, 0.04, 0.34, -0.08,
+  ], 3));
+  const tufts = [];
+  for (let i = 0; i < 180; i++) {
+    const x = (rand() - 0.5) * 20, z = (rand() - 0.5) * 14;
+    if (x < -6.1 && x > -9.2) continue;
+    if (z > 0.7 && x > -0.6 && x < 3.5) continue;
+    if (x > 6.5 && x < 9 && z < 0) continue;
+    tufts.push({ x, z, angle: rand() * Math.PI, scale: 0.58 + rand() * 0.75 });
+  }
+  const grass = new THREE.InstancedMesh(blades, new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }), tufts.length);
+  const grassColors = [0x6ca638, 0x80b641, 0x94c94f, 0x568b36].map((color) => new THREE.Color(color));
+  tufts.forEach((_, i) => grass.setColorAt(i, grassColors[i % grassColors.length]));
+  grass.frustumCulled = false;
+  deco.add(grass);
+
+  const instance = new THREE.Object3D();
+  const waterPoint = new THREE.Vector3();
+  const waterTangent = new THREE.Vector3();
+  const waterNormal = new THREE.Vector3();
+  function moveLandscape(time) {
+    for (const { canopy, phase } of canopies) {
+      canopy.rotation.z = Math.sin(time * 1.7 + phase) * 0.09;
+      canopy.rotation.x = Math.cos(time * 1.25 + phase) * 0.065;
+    }
+    tufts.forEach(({ x, z, angle, scale }, i) => {
+      instance.position.set(x, 0.015, z);
+      instance.rotation.set(Math.sin(time * 2.7 + z * 0.65 + x * 0.35) * 0.31, angle, 0);
+      instance.scale.setScalar(scale);
+      instance.updateMatrix();
+      grass.setMatrixAt(i, instance.matrix);
+    });
+    grass.instanceMatrix.needsUpdate = true;
+    currents.forEach(({ start, lane, length }, i) => {
+      const progress = (start + time * 0.09) % 1;
+      river.getPoint(progress, waterPoint);
+      river.getTangent(progress, waterTangent);
+      instance.position.copy(waterPoint).addScaledVector(waterNormal.set(waterTangent.z, 0, -waterTangent.x), lane);
+      instance.rotation.set(0, Math.atan2(waterTangent.x, waterTangent.z), 0);
+      const edge = Math.max(0, Math.min(1, (7.6 - Math.abs(waterPoint.z)) * 3));
+      instance.scale.set(0.055 * edge, 1, length * edge);
+      instance.updateMatrix();
+      ripples.setMatrixAt(i, instance.matrix);
+    });
+    ripples.instanceMatrix.needsUpdate = true;
+  }
+  moveLandscape(0);
   for (let i = 0; i < 28; i++) {
     const x = -10 + rand() * 20, z = -7.5 + rand() * 15;
     if (x > PEN.x0 - 1 && x < PEN.x1 + 1 && z > PEN.z0 - 1 && z < DEPOSIT.z + 1.5) continue;
@@ -252,6 +345,8 @@ export function createMeadow(container, hooks) {
     const entered = reveal.outcome === 'entered';
     stageBusy = true;
     setDeposit(reveal.cards.length);
+    const leaving = entered ? [] : [...actors].filter(([, actor]) => !actor.userData.stage);
+    for (const [, actor] of leaving) actor.userData.stage = true;
     const group = arrivals.map((arrival, i) => ({ ...arrival, t: reveal.cards[i] }));
     arrivals = [];
     const wait = calm ? 60 : 600;
@@ -315,18 +410,32 @@ export function createMeadow(container, hooks) {
         }
       });
       at(chase + (calm ? 400 : 2900), () => { gateTarget = 0; });
-    } else {
-      if (!calm) {
-        at(chase + 300, () => wolves().forEach((g, i) => { g.a.userData.anim = { action: 'dance', t0: performance.now() + i * 100 }; }));
-        at(chase + 1350, () => group.forEach((g) => puff(g.a.position)));
-      }
+    } else if (!calm) {
+      at(chase, () => {
+        gateTarget = 1;
+        for (const [, actor] of leaving) {
+          actor.userData.anim = null;
+          actor.userData.target.set(0.5, TOP, PEN.z1 + 0.2);
+          actor.userData.speed = 4.8;
+        }
+      });
+      at(chase + 1800, () => leaving.forEach(([, actor], i) => {
+        actor.userData.target.set(1.5 + (i % 3) * 0.4, TOP, 7.6);
+      }));
+      at(chase + 2600, () => group.forEach((g) => puff(g.a.position)));
     }
-    const end = chase + (calm ? 450 : entered ? 3250 : 1550);
+    const end = chase + (calm ? 450 : entered ? 3250 : 3450);
     at(end, () => {
-      for (const g of group) {
-        if (!g.a.userData.stage) continue;
-        scene.remove(g.a);
-        actors.delete(g.id);
+      gateTarget = 0;
+      for (const { id, a } of group) {
+        if (!a.userData.stage) continue;
+        scene.remove(a);
+        actors.delete(id);
+      }
+      for (const [id, actor] of leaving) {
+        scene.remove(actor);
+        actors.delete(id);
+        held.delete(id);
       }
       stageBusy = false;
       for (const [id, name] of unclaimed) spawn(id).userData.name = name;
@@ -414,10 +523,16 @@ export function createMeadow(container, hooks) {
   new ResizeObserver(resize).observe(container);
   resize();
 
-  let last = performance.now();
+  const idleActions = ['graze', 'sleep', 'jump', 'bleat', 'dance'];
+  let last = performance.now(), landscapeTick = -1;
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
+    const tick = calm ? 0 : Math.floor(now / 45);
+    if (tick !== landscapeTick) {
+      moveLandscape(tick * 0.045);
+      landscapeTick = tick;
+    }
     for (let i = tweens.length - 1; i >= 0; i--) if (tweens[i](now)) tweens.splice(i, 1);
     gateNow += (gateTarget - gateNow) * Math.min(1, dt * 4);
     leafL.rotation.y = gateNow * 1.5;
@@ -429,15 +544,21 @@ export function createMeadow(container, hooks) {
       body.rotation.set(0, 0, 0);
       const head = body.getObjectByName('head');
       if (head) head.rotation.x = 0;
+      if (!calm && !u.stage && !u.anim && now > u.nextMove) {
+        if (Math.random() < 0.42) {
+          u.target = penSpot();
+          u.speed = 0.5 + Math.random() * 0.55;
+        } else {
+          const action = idleActions[Math.floor(Math.random() * idleActions.length)];
+          u.target.copy(a.position);
+          u.anim = { action, t0: now };
+        }
+        u.nextMove = now + 2200 + Math.random() * 5500;
+      }
       const anim = u.anim;
       const k = anim ? (now - anim.t0) / ACTION_MS[anim.action] : 1;
       if (anim && k >= 1) u.anim = null;
       const asleep = anim && anim.action === 'sleep' && k < 1;
-      if (!calm && !asleep && now > u.nextMove && !u.stage) {
-        u.target = penSpot();
-        u.speed = 0.5 + Math.random() * 0.5;
-        u.nextMove = now + 3500 + Math.random() * 5000;
-      }
       const to = u.target.clone().sub(a.position);
       to.y = 0;
       const dist = to.length();

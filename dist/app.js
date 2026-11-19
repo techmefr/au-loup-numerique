@@ -163,8 +163,8 @@ function handCards(cards, interactive) {
 
 function outcomeText(r, g) {
   if (r.outcome === 'entered') return r.resolution.sheepSaved ? `Le portail s'ouvre ! ${r.resolution.sheepSaved} mouton(s) rentrent dans l'enclos.` : "Le portail s'ouvre, mais aucun mouton ne rentre.";
-  if (r.outcome === 'author_took') return `${pName(r.accuserId)} a bien crié AU LOUP ! ${pName(r.authorId)} a menti et reprend toutes les cartes.`;
-  return `${pName(r.accuserId)} s'est trompé : ${pName(r.authorId)} disait vrai. ${pName(r.accuserId)} prend toutes les cartes.`;
+  if (r.outcome === 'author_took') return `${pName(r.accuserId)} a bien crié AU LOUP ! ${pName(r.authorId)} a menti et reprend la pile. Le troupeau quitte l’enclos.`;
+  return `${pName(r.accuserId)} s'est trompé : ${pName(r.authorId)} disait vrai. ${pName(r.accuserId)} ramasse la pile. Le troupeau quitte l’enclos.`;
 }
 
 function render() {
