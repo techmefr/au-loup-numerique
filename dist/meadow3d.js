@@ -451,10 +451,34 @@ export function createMeadow(container, hooks) {
 
   const penSpot = () => new THREE.Vector3(PEN.x0 + 0.8 + Math.random() * (PEN.x1 - PEN.x0 - 1.6), TOP, PEN.z0 + 0.8 + Math.random() * (PEN.z1 - PEN.z0 - 1.8));
 
+  const sleepCanvas = document.createElement('canvas');
+  sleepCanvas.width = 128;
+  sleepCanvas.height = 64;
+  const sleepInk = sleepCanvas.getContext('2d');
+  sleepInk.lineWidth = 7;
+  sleepInk.lineJoin = 'round';
+  sleepInk.strokeStyle = '#fff8db';
+  sleepInk.fillStyle = '#294967';
+  for (const [text, x, y, size] of [['Z', 7, 52, 52], ['z', 49, 38, 40], ['z', 80, 23, 34]]) {
+    sleepInk.font = `bold ${size}px Georgia, serif`;
+    sleepInk.strokeText(text, x, y);
+    sleepInk.fillText(text, x, y);
+  }
+  const sleepTexture = new THREE.CanvasTexture(sleepCanvas);
+  sleepTexture.colorSpace = THREE.SRGBColorSpace;
+  const sleepMaterial = new THREE.SpriteMaterial({ map: sleepTexture, depthWrite: false });
+
   function spawn(id, type = 'sheep', at = penSpot()) {
     const model = animalModel(type);
     model.position.copy(at);
     model.userData = { ...model.userData, id, type, target: at.clone(), speed: 0.6 + Math.random() * 0.4, nextMove: performance.now() + Math.random() * 3000, idlePhase: Math.random() * 7, anim: null, name: '', stage: false };
+    if (type === 'sheep') {
+      const badge = new THREE.Sprite(sleepMaterial);
+      badge.scale.set(2.35, 1.175, 1);
+      badge.visible = false;
+      model.add(badge);
+      model.userData.sleepBadge = badge;
+    }
     model.traverse((o) => { o.userData.actorId = id; });
     scene.add(model);
     actors.set(id, model);
@@ -517,7 +541,7 @@ export function createMeadow(container, hooks) {
   function animate(id, action) {
     const a = actors.get(id);
     if (!a || a.userData.stage) return;
-    if (calm && action !== 'bleat') return;
+    if (calm && action !== 'bleat' && action !== 'sleep') return;
     a.userData.anim = { action, t0: performance.now() };
     if (action === 'run') { a.userData.target = penSpot(); a.userData.speed = 3; }
     hooks.onAction?.(id, action, a.userData.name);
@@ -660,15 +684,14 @@ export function createMeadow(container, hooks) {
     camera.updateProjectionMatrix();
   }
   const dom = renderer.domElement;
-  dom.style.touchAction = 'none';
   const pointers = new Map();
-  let drag = null, pinch = 0;
+  let drag = null, pinch = 0, tap = null;
   dom.addEventListener('pointerdown', (e) => {
     const r = dom.getBoundingClientRect();
     const px = e.clientX - r.left, py = e.clientY - r.top;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     dom.setPointerCapture?.(e.pointerId);
-    if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); drag = null; return; }
+    if (pointers.size === 2) { tap = null; const [a, b] = [...pointers.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); drag = null; return; }
     let best = null, bestD = 44;
     for (const [id, a] of actors) {
       if (a.userData.type !== 'sheep' || a.userData.stage) continue;
@@ -676,12 +699,12 @@ export function createMeadow(container, hooks) {
       const d = Math.hypot(((v.x + 1) / 2) * r.width - px, ((1 - v.y) / 2) * r.height - py);
       if (d < bestD) { bestD = d; best = id; }
     }
-    if (best) { drag = null; hooks.onPick?.(best); return; }
-    hooks.onPick?.(null);
-    drag = { x: e.clientX, y: e.clientY };
+    tap = { id: e.pointerId, x: e.clientX, y: e.clientY, animal: best };
+    drag = best ? null : { x: e.clientX, y: e.clientY };
   });
   dom.addEventListener('pointermove', (e) => {
     if (!pointers.has(e.pointerId)) return;
+    if (tap?.id === e.pointerId && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 8) tap = null;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
@@ -693,11 +716,19 @@ export function createMeadow(container, hooks) {
     if (!drag) return;
     const k = (2 * (baseD / zoom) * Math.tan((camera.fov * Math.PI) / 360)) / size.h;
     pan.x -= (e.clientX - drag.x) * k;
-    pan.z -= ((e.clientY - drag.y) * k) / Math.sin(tilt);
+    if (e.pointerType !== 'touch') pan.z -= ((e.clientY - drag.y) * k) / Math.sin(tilt);
     drag = { x: e.clientX, y: e.clientY };
     updateCamera();
   });
-  const release = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) pinch = 0; if (!pointers.size) drag = null; };
+  const release = (e) => {
+    if (tap?.id === e.pointerId) {
+      if (e.type === 'pointerup') hooks.onPick?.(tap.animal);
+      tap = null;
+    }
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = 0;
+    if (!pointers.size) drag = null;
+  };
   dom.addEventListener('pointerup', release);
   dom.addEventListener('pointercancel', release);
   dom.addEventListener('wheel', (e) => { e.preventDefault(); zoom *= Math.exp(-e.deltaY * 0.0015); updateCamera(); }, { passive: false });
@@ -754,6 +785,10 @@ export function createMeadow(container, hooks) {
       const k = anim ? (now - anim.t0) / ACTION_MS[anim.action] : 1;
       if (anim && k >= 1) u.anim = null;
       const asleep = anim && anim.action === 'sleep' && k < 1;
+      if (u.sleepBadge) {
+        u.sleepBadge.visible = Boolean(asleep);
+        if (asleep) u.sleepBadge.position.set(0, 1.62 + (calm ? 0 : Math.sin(k * Math.PI * 2) * 0.16), 0);
+      }
       const to = u.target.clone().sub(a.position);
       to.y = 0;
       const dist = to.length();

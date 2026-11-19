@@ -387,7 +387,7 @@ function variantPanel(g, isAuthor, isHost) {
     return `<section class="panel"><h2>${current}</h2><p>Pioche · ${variant.deck} carte(s)</p>
       <p class="claim">${variant.turnSheep} mouton(s) · ${variant.shields} protection(s)</p>
       ${faceUpCards(variant.turnCards)}
-      ${isAuthor ? `<div class="row"><button id="variant-draw" class="gold">Piocher</button>
+      ${isAuthor ? `<div class="row round-actions"><button id="variant-draw" class="gold">Piocher</button>
         <button id="variant-stop" ${variant.turnCards.length ? '' : 'disabled'}>J’arrête</button></div>` : ''}</section>`;
   }
   const instruction = isHidden ? 'Pose 1 à 3 cartes dans la bergerie.'
@@ -398,7 +398,7 @@ function variantPanel(g, isAuthor, isHost) {
   return `<section class="panel"><h2>${current}</h2>${role}${progress}
     ${isHidden ? `<p>${variant.pile} carte(s) dans la bergerie</p>` : ''}${flockCounts}${announcements}
     ${isAuthor ? `<p>${instruction}</p>` : ''}${g.hand?.length ? `<div class="hand" id="hand">${handCards(g.hand, isAuthor)}</div>` : ''}
-    ${isAuthor ? `${claim}<div class="row">${target}<button class="gold" id="variant-play" ${selected.size ? '' : 'disabled'}>${isPass ? 'Passer la carte' : 'Poser'}</button></div>` : ''}</section>`;
+    ${isAuthor ? `${claim}<div class="row round-actions">${target}<button class="gold" id="variant-play" ${selected.size ? '' : 'disabled'}>${isPass ? 'Passer la carte' : 'Poser'}</button></div>` : ''}</section>`;
 }
 
 function resultMood(game) {
@@ -505,7 +505,7 @@ function render() {
       : `<p class="center-text"><span class="claim">« Ce sont des moutons ! »</span></p>`;
     body = isAuthor
       ? `<div class="panel hand-panel"><h2>À toi de jouer !</h2><p>Choisis 1 à 3 cartes à poser devant l'enclos.</p><div class="hand" id="hand">${handCards(g.hand, true)}</div>${claimUi}
-        <div class="row center"><button id="play" class="gold" ${selected.size < 1 ? 'disabled' : ''}>Envoyer ${selected.size ? '(' + selected.size + ')' : ''}</button></div></div>`
+        <div class="row center round-actions"><button id="play" class="gold" ${selected.size < 1 ? 'disabled' : ''}>Envoyer ${selected.size ? '(' + selected.size + ')' : ''}</button></div></div>`
       : `<div class="panel hand-panel"><h2>${pName(g.authorId)} choisit ses cartes…</h2><div class="hand" id="hand">${handCards(g.hand, false)}</div></div>`;
   } else if (g.phase === 'voting') {
     const claim = g.claim.kind === 'all-sheep' ? 'Ce sont des moutons !' : `${g.claim.count} mouton(s) vont rentrer !`;
@@ -514,7 +514,7 @@ function render() {
       <div class="pile" id="pile">${backs}</div>
       <p>Réponses : ${g.voted}/${g.voters}</p>`;
     if (!isAuthor && !g.myVote) body += `<p>Glisse la pile à gauche pour crier AU LOUP !, à droite pour laisser entrer — ou utilise les boutons.</p>
-      <div class="row center"><button class="red" id="vw">← AU LOUP !</button><button class="green" id="vt">Je valide →</button></div>`;
+      <div class="row center round-actions"><button class="red" id="vw">← AU LOUP !</button><button class="green" id="vt">Je valide →</button></div>`;
     else body += `<p>${isAuthor ? 'Les autres décident…' : 'Réponse enregistrée. En attente des autres…'}</p>`;
     body += '</div>';
   } else if (resolving) {
@@ -590,7 +590,20 @@ function render() {
     let x0 = null;
     pile.onpointerdown = (e) => { x0 = e.clientX; pile.setPointerCapture(e.pointerId); };
     pile.onpointermove = (e) => { if (x0 !== null) { const d = e.clientX - x0; pile.style.transform = `translateX(${d}px) rotate(${d / 20}deg)`; pile.style.outline = d < -40 ? '4px solid #e0453a' : d > 40 ? '4px solid #4caf50' : ''; } };
-    pile.onpointerup = (e) => { const d = e.clientX - x0; x0 = null; pile.style.transform = ''; pile.style.outline = ''; if (d < -80) vote('wolf'); else if (d > 80) vote('trust'); };
+    function clearSwipe() {
+      x0 = null;
+      pile.style.transform = '';
+      pile.style.outline = '';
+    }
+    pile.onpointercancel = clearSwipe;
+    pile.onpointerup = (event) => {
+      if (x0 === null) return;
+      const distance = event.clientX - x0;
+      const threshold = Math.min(80, pile.clientWidth * 0.23);
+      clearSwipe();
+      if (distance < -threshold) vote('wolf');
+      else if (distance > threshold) vote('trust');
+    };
   }
 }
 render();

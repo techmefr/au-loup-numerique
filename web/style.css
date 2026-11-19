@@ -33,6 +33,8 @@ body {
 }
 
 header.hud {
+  position: relative;
+  z-index: 3;
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
@@ -49,6 +51,35 @@ header.hud {
 .chip.gold { background: #f9e8b9; border-color: #e8cf90; }
 .opts label { display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 4px; font-size: .78rem; cursor: pointer; }
 
+.settings { position: relative; }
+.settings summary {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid #d6b36b80;
+  border-radius: 10px;
+  font-size: .8rem;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.settings summary::-webkit-details-marker { display: none; }
+.settings[open] summary { background: #496350; }
+.settings-panel {
+  position: absolute;
+  inset: calc(100% + 6px) 0 auto auto;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  padding: 6px 10px 10px;
+  border: 1px solid var(--brass);
+  border-radius: 12px;
+  background: var(--felt);
+  box-shadow: 0 8px 18px #0713108a;
+}
+.settings-panel input { width: 18px; height: 18px; }
+.settings-panel button { width: 100%; margin-top: 4px; }
+
 .scene {
   position: sticky;
   top: 14px;
@@ -60,7 +91,7 @@ header.hud {
   outline: 1px solid #f3d69c65;
   box-shadow: 0 6px 0 #0e201a, 0 15px 32px #09151183;
 }
-.scene canvas { display: block; width: 100%; height: 100%; cursor: pointer; }
+.scene canvas { display: block; width: 100%; height: 100%; cursor: pointer; touch-action: none; }
 .scene.big { grid-column: 1 / -1; position: relative; top: auto; height: 72svh; }
 .scene.big + main { grid-column: 1 / -1; }
 #menu { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
@@ -282,13 +313,32 @@ main > .sr:focus-within { position: static; width: auto; height: auto; overflow:
 .sr:focus-visible { position: static; width: auto; height: auto; clip-path: none; }
 
 @media (max-width: 850px) {
-  body { grid-template-columns: minmax(0, 1fr); }
-  .scene { position: relative; top: auto; height: clamp(210px, 31svh, 310px); scroll-margin-top: 12px; }
-  .home .scene { height: clamp(190px, 32svh, 300px); }
+  body { grid-template-columns: minmax(0, 1fr); gap: 11px; padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+  header.hud { gap: 7px 9px; padding-bottom: 8px; }
+  .logo { width: clamp(80px, 26vw, 136px); }
+  #chips { order: 2; width: 100%; gap: 4px; }
+  #chips:empty { display: none; }
+  .chip { flex: 1 0 auto; padding: 3px 5px; }
+  .chip small { font-size: .6rem; }
+  .opts { gap: 4px; }
+  .opts > button.small, .settings summary { padding-inline: 7px; font-size: .72rem; }
+  .scene { position: relative; top: auto; height: clamp(188px, 30svh, 300px); scroll-margin-top: 10px; }
+  .scene canvas { touch-action: pan-y pinch-zoom; }
+  .home .scene { height: clamp(150px, 25svh, 260px); }
   .card { width: clamp(49px, 12vw, 79px); }
+  .hand { gap: 8px 4px; padding-inline: 3px; }
+  .mode:not(:has(input:checked)) span { display: none; }
+  .mode { min-height: 44px; align-items: center; }
+  .round-actions {
+    position: sticky;
+    z-index: 1;
+    bottom: env(safe-area-inset-bottom, 0);
+    padding: 6px 0;
+    background: #f9f2e2;
+    border-radius: 10px;
+  }
+  .round-actions > button { flex: 1 1 auto; }
 }
-
-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

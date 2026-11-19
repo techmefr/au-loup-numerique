@@ -104,3 +104,51 @@ test('les règles intégrées restent lisibles et navigables sur petit écran', 
   await expect(guide).toBeHidden();
   await expect(trigger).toBeFocused();
 });
+
+test('une partie se joue au toucher sur un écran de 320 px', async ({ browser }) => {
+  test.setTimeout(90000);
+  const context = await browser.newContext({
+    viewport: { width: 320, height: 560 },
+    isMobile: true,
+    hasTouch: true,
+    reducedMotion: 'reduce',
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto('http://localhost:4173/au-loup-numerique/?local=1');
+    await page.fill('#name', 'Alice');
+    await page.locator('#solo').tap();
+
+    const scene = page.locator('#scene');
+    await expect(page.locator('#hand .card').first()).toBeVisible();
+    await scene.scrollIntoViewIfNeeded();
+    const before = await page.evaluate(() => scrollY);
+    const bounds = (await scene.boundingBox())!;
+    const cdp = await context.newCDPSession(page);
+    const x = Math.round(bounds.x + bounds.width / 2);
+    const y = Math.round(bounds.y + bounds.height * 0.75);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    for (let i = 1; i <= 8; i++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - i * 14 }] });
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(before);
+    await expect(page.locator('#menu button')).toHaveCount(0);
+
+    const hand = page.locator('#hand .card');
+    await hand.first().tap();
+    await expect(hand.first()).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#play')).toBeInViewport();
+    await page.locator('#play').tap();
+    await expect(page.locator('.result-panel')).toBeVisible({ timeout: 15000 });
+    await page.locator('#next').tap();
+
+    const trust = page.locator('#vt');
+    await expect(trust).toBeVisible({ timeout: 12000 });
+    await trust.tap();
+    await expect(page.locator('.result-panel')).toBeVisible({ timeout: 15000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+  } finally {
+    await context.close();
+  }
+});
