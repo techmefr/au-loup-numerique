@@ -75,3 +75,29 @@ test('les quatre autres modes du livret sont jouables en solo', async ({ page })
   await expect(page.getByText(/Alice marque [01] point/)).toBeVisible();
   await expect(page.locator('#next')).toBeVisible();
 });
+
+test('les règles intégrées restent lisibles et navigables sur petit écran', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto('http://localhost:4173/au-loup-numerique/?local=1');
+  await page.locator('[name=mode][value=compte]').check();
+  const trigger = page.locator('#rules-home');
+  await trigger.click();
+
+  const guide = page.getByRole('dialog', { name: 'Règles du jeu' });
+  await expect(guide.getByRole('heading', { name: 'Compte tes moutons !' })).toBeVisible();
+  const modes = guide.getByLabel('Mode de jeu');
+  await expect(modes.locator('option')).toHaveCount(6);
+  await modes.selectOption('loup-parmi-nous');
+  await expect(guide.getByText(/Les Moutons gagnent avec 15/)).toBeVisible();
+  await expect(guide.locator('.rules-cards img')).toHaveCount(3);
+  expect(await guide.evaluate((element) => element.scrollWidth)).toBeLessThanOrEqual(318);
+  await guide.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await expect(guide.getByRole('button', { name: 'Fermer' })).toBeInViewport();
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await modes.selectOption('qui-sy-frotte');
+  await expect(guide.getByRole('heading', { name: 'Qui s’y frotte s’y pique !' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(guide).toBeHidden();
+  await expect(trigger).toBeFocused();
+});

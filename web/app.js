@@ -16,12 +16,68 @@ const campName = (camp) => camp === 'wolf' ? 'Loups' : 'Moutons';
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[char]);
-const RULE_PAGES = [
-  ['histoire.webp', 'Le principe en 4 images'],
-  ['couverture.webp', 'Résumé des modes'],
-  ['modes-1-2-6.webp', 'Modes 1, 2 et 6'],
-  ['modes-3-4-5.webp', 'Modes 3, 4 et 5'],
-];
+const RULES = {
+  'ni-vu': {
+    steps: [
+      'Choisis 1 à 3 cartes et pose-les face cachée devant le portail. Tu annonces que ce sont des moutons. Un chien est autorisé.',
+      'Les autres joueurs valident ou crient « Au loup ! ». Si personne ne t’accuse, on révèle les cartes. Chaque chien chasse un loup, puis chaque loup restant dévore un mouton. Les survivants rejoignent la prairie.',
+      'Si quelqu’un t’accuse et qu’il y a un loup, tu ramasses. S’il n’y a aucun loup, c’est l’accusateur qui ramasse. Le joueur sanctionné récupère toute la prairie et la pose en cours.',
+    ],
+    end: 'Vide ta main pour gagner.',
+    example: 'Un mouton, un chien et un loup sont posés. Une accusation est justifiée, même si le chien pourrait chasser le loup.',
+    cards: ['sheep', 'dog', 'wolf'],
+  },
+  compte: {
+    steps: [
+      'Pose 1 à 3 cartes face cachée. Annonce combien de moutons franchiront le portail, de 0 à 3.',
+      'Les autres valident ou crient « Au loup ! ». Au décompte, chaque chien chasse un loup. Chaque loup restant dévore un mouton.',
+      'Si quelqu’un t’accuse, tu ramasses quand ton annonce est fausse. Si elle est exacte, l’accusateur ramasse. Le joueur sanctionné reprend toute la prairie et la pose en cours.',
+    ],
+    end: 'Vide ta main pour gagner.',
+    example: 'Avec un mouton, un chien et un loup, le chien chasse le loup. Annoncer « un mouton sauvé » est exact.',
+    cards: ['sheep', 'dog', 'wolf'],
+  },
+  'loup-parmi-nous': {
+    steps: [
+      'Chacun reçoit trois cartes et un rôle secret. Il y a un loup à 3, 4 ou 5 joueurs et deux loups à 6, 7 ou 8. Ton rôle et tes cartes sont indépendants.',
+      'À ton tour, pose 1 à 3 cartes dans la bergerie et fais l’annonce de ton choix. Repioche pour revenir à trois cartes si possible.',
+      'Quand tout le monde a joué, révèle la bergerie. Chaque chien chasse un loup, puis chaque loup restant dévore un mouton. Les deux camps cumulent leurs résultats entre les manches.',
+    ],
+    end: 'Les Moutons gagnent avec 15 moutons sauvés. Les Loups gagnent avec 8 dévorés. Si les deux camps atteignent leur objectif ensemble, ou si les cartes s’épuisent avant, c’est une égalité.',
+    example: 'Dans la bergerie, un loup et deux moutons sont révélés. Sans chien, un mouton est dévoré et l’autre est sauvé.',
+    cards: ['wolf', 'sheep', 'sheep'],
+  },
+  'passe-ton-loup': {
+    steps: [
+      'Chacun commence avec trois cartes. Au départ, au moins un loup et un chien sont répartis dans des mains différentes.',
+      'Choisis une carte et passe-la face cachée au joueur suivant. C’est ensuite à lui de jouer.',
+      'Après chaque passage, vérifie la main du destinataire. Le duo loup et chien met fin à la manche immédiatement.',
+    ],
+    end: 'Le joueur qui se retrouve avec un loup et un chien dans la même main perd la manche.',
+    example: 'Tu as déjà un chien. Si le joueur précédent te passe un loup, tu perds immédiatement.',
+    cards: ['dog', 'wolf'],
+  },
+  'troupeau-de-tete': {
+    steps: [
+      'Commence avec trois cartes. À ton tour, pose une carte face cachée dans ton troupeau ou dans celui d’un adversaire.',
+      'Repioche après chaque pose tant qu’il reste des cartes. La partie continue jusqu’à ce que toutes les cartes aient été posées.',
+      'On révèle chaque troupeau séparément. Les chiens y chassent les loups, puis les loups restants dévorent les moutons.',
+    ],
+    end: 'Le plus grand troupeau de moutons survivants gagne. Si plusieurs joueurs arrivent en tête, ils partagent la victoire.',
+    example: 'Un loup seul dévore un mouton. Ajouter un chien à ton troupeau peut le protéger.',
+    cards: ['sheep', 'wolf', 'dog'],
+  },
+  'qui-sy-frotte': {
+    steps: [
+      'Pioche une carte et révèle-la. Un mouton rapporte un point pour ce tour. Un chien protège contre un prochain loup du même tour.',
+      'Un loup consomme une protection si tu en as une. Sinon, il te fait perdre un mouton gagné pendant ce tour, jusqu’à un minimum de zéro.',
+      'Après chaque carte, continue à piocher ou arrête-toi pour encaisser les points du tour. Ensuite, passe la main.',
+    ],
+    end: 'À la fin de la pioche, le plus haut total gagne. En cas d’égalité, la victoire est partagée. Ce mode est encore en test.',
+    example: 'Mouton, chien, loup. Le chien protège contre le loup. Si tu t’arrêtes ici, tu marques un point.',
+    cards: ['sheep', 'dog', 'wolf'],
+  },
+};
 const ERR = {
   need_three_players: 'Ce mode demande au moins 3 joueurs', room_not_found: 'Salle introuvable', not_enough_players: 'Il faut au moins 2 joueurs', room_full: 'Salle pleine',
   game_started: 'Partie déjà commencée', host_only: "Réservé à l'hôte", bad_selection: 'Choisis 1 à 3 cartes', stale_round: 'Manche dépassée',
@@ -73,9 +129,7 @@ function closeRadial(restoreFocus = false) {
 }
 
 addEventListener('keydown', (event) => {
-  if (event.key !== 'Escape') return;
-  closeRadial(true);
-  closeRules();
+  if (event.key === 'Escape' && !$('#rules').open) closeRadial(true);
 });
 
 function openRadial(id) {
@@ -233,13 +287,36 @@ $('#calm').onchange = applyCalm;
 if (matchMedia('(prefers-reduced-motion: reduce)').matches) $('#calm').checked = true;
 applyCalm();
 
-function closeRules() { $('#rules').hidden = true; }
-$('#rules-open').onclick = () => {
-  $('#rules-body').innerHTML = RULE_PAGES.map(([f, t]) => `<figure><img src="assets/rules/${f}" alt="${t}" loading="lazy"><figcaption>${t}</figcaption></figure>`).join('');
-  $('#rules').hidden = false;
-  $('#rules-close').focus();
-};
-$('#rules-close').onclick = closeRules;
+const rulesDialog = $('#rules');
+const rulesMode = $('#rules-mode');
+const rulesBody = $('#rules-body');
+rulesMode.replaceChildren(...Object.entries(MODES).map(([key, [title]]) => new Option(title, key)));
+
+function renderRules() {
+  const key = rulesMode.value;
+  const [title, , min, max] = MODES[key];
+  const { steps, end, example, cards } = RULES[key];
+  rulesBody.innerHTML = `<article class="rules-page">
+    <header><p class="rules-players">${min} à ${max} joueurs</p><h3>${title}</h3></header>
+    <ol class="rules-steps">${steps.map((step) => `<li>${step}</li>`).join('')}</ol>
+    <section class="rules-finish"><h4>Fin de partie</h4><p>${end}</p></section>
+    <section class="rules-example"><h4>Exemple avec les cartes</h4>
+      <ul class="rules-cards">${cards.map((card) => `<li><img src="assets/cards/${card}.png" alt="" width="63" height="88"><span>${NAME[card]}</span></li>`).join('')}</ul>
+      <p>${example}</p>
+    </section>
+  </article>`;
+}
+
+function openRules() {
+  rulesMode.value = snap?.mode ?? document.querySelector('[name=mode]:checked')?.value ?? prefMode;
+  renderRules();
+  rulesDialog.showModal();
+  rulesDialog.scrollTop = 0;
+}
+
+rulesMode.onchange = renderRules;
+$('#rules-open').onclick = openRules;
+$('#rules-close').onclick = () => rulesDialog.close();
 
 const pName = (id) => escapeHtml(snap.players.find((p) => p.id === id)?.name ?? '?');
 const cardImg = (type) => `<img src="assets/cards/${type}.png" alt="" draggable="false">`;
@@ -337,7 +414,7 @@ function render() {
       <fieldset class="modes"><legend>Mode de jeu</legend>
         ${Object.entries(MODES).map(([key, [title, description, min, max]]) => `<label class="mode"><input type="radio" name="mode" value="${key}" ${prefMode === key ? 'checked' : ''}><b>${title}</b><span>${min} à ${max} joueurs · ${description}</span></label>`).join('')}
       </fieldset>
-      <div class="row"><button id="rules-home">Voir les règles illustrées</button></div>
+      <div class="row"><button id="rules-home">Voir les règles</button></div>
       <div class="row"><button id="solo" class="gold">Jouer contre l'ordinateur</button>
         <label class="inline">Adversaires <select id="bots"></select></label></div>
       ${LOCAL ? '<p class="small">Version en ligne : tu joues contre les ordinateurs, directement dans ton navigateur. Le multijoueur entre amis demande le serveur (voir le README).</p>' : `<div class="row"><button id="create">Créer une partie entre amis</button></div>
@@ -355,7 +432,7 @@ function render() {
     };
     document.querySelectorAll('[name=mode]').forEach((radio) => radio.onchange = updateBots);
     updateBots();
-    $('#rules-home').onclick = () => $('#rules-open').click();
+    $('#rules-home').onclick = openRules;
     $('#solo').onclick = () => send({ type: 'room:create', displayName: name(), voteSeconds: 60, mode: mode(), bots: Number($('#bots').value), solo: true });
     if (!LOCAL) $('#create').onclick = () => send({ type: 'room:create', displayName: name(), voteSeconds: 60, mode: mode() });
     if (!LOCAL) $('#join').onclick = () => send({ type: 'room:join', code: $('#code').value.trim().toUpperCase(), displayName: name() });
@@ -469,7 +546,7 @@ const hideSplash = () => { splash.hidden = true; };
 if (!displayCode && (!navigator.webdriver || url.searchParams.has('splash')) && !roomCode) splash.hidden = false;
 $('#mode-home').onclick = () => location.reload();
 $('#splash-play').onclick = hideSplash;
-$('#splash-rules').onclick = () => { hideSplash(); $('#rules-open').click(); };
+$('#splash-rules').onclick = () => { hideSplash(); openRules(); };
 $('#share').onclick = async () => {
   const link = snap && !LOCAL ? `${location.origin}/room/${snap.code}` : location.origin + location.pathname.replace(/\/(room|display)\/.*$/, '/');
   const data = { title: 'AU LOUP !', text: 'Viens jouer à AU LOUP !', url: link };
