@@ -90,21 +90,22 @@ export function paintGround() {
   }
 
   stroke(ctx, riverPoints, 210, '#e8d89e');
-  stroke(ctx, riverPoints, 160, '#3d78c8');
-  stroke(ctx, riverPoints, 110, '#5b9be0');
-  ctx.globalAlpha = 0.5;
-  stroke(ctx, riverPoints, 40, '#a5d0f5');
+  stroke(ctx, riverPoints, 164, '#509d9b');
+  stroke(ctx, riverPoints, 142, '#66c2ba');
+  stroke(ctx, riverPoints, 104, '#368f9f');
+  ctx.globalAlpha = 0.38;
+  stroke(ctx, riverPoints, 61, '#71cdd2');
   ctx.globalAlpha = 1;
   stroke(ctx, pathPoints, 110, '#d9c18c');
   stroke(ctx, pathPoints, 84, '#ead7a6');
   stroke(ctx, pathBack, 90, '#d9c18c');
   stroke(ctx, pathBack, 66, '#ead7a6');
 
-  for (let i = 0; i < 9000; i++) {
+  for (let i = 0; i < 4400; i++) {
     ctx.fillStyle = ['#f6e27a', '#ffffff', '#f3c14b'][i % 3];
-    ctx.globalAlpha = 0.35 + rand() * 0.4;
+    ctx.globalAlpha = 0.25 + rand() * 0.38;
     ctx.beginPath();
-    ctx.arc(rand() * W, rand() * H, 2 + rand() * 3, 0, 7);
+    ctx.arc(rand() * W, rand() * H, 1.5 + rand() * 2.7, 0, 7);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
